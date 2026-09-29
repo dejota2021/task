@@ -94,9 +94,7 @@ body {
 }
 
 .column-3d-container:hover {
-  transform: perspective(1000px) translateY(-6px) translateZ(24px) rotateX(1.5deg) rotateY(1.5deg) !important;
   box-shadow: 0 30px 60px rgba(0, 0, 0, 0.8), 0 0 25px rgba(255, 159, 10, 0.15);
-  border-color: rgba(255, 159, 10, 0.4) !important;
 }
 
 /* Parallax Z-axis lift for cards inside column on hover */

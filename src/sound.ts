@@ -32,7 +32,7 @@ export function playPop() {
   osc.frequency.setValueAtTime(160, ctx.currentTime);
   osc.frequency.exponentialRampToValueAtTime(700, ctx.currentTime + 0.07);
 
-  gain.gain.setValueAtTime(0.06, ctx.currentTime);
+  gain.gain.setValueAtTime(0.35, ctx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.005, ctx.currentTime + 0.09);
 
   osc.start(ctx.currentTime);
@@ -57,8 +57,8 @@ export function playWoosh() {
   osc.frequency.setValueAtTime(300, ctx.currentTime);
   osc.frequency.exponentialRampToValueAtTime(140, ctx.currentTime + 0.2);
 
-  gain.gain.setValueAtTime(0.04, ctx.currentTime);
-  gain.gain.linearRampToValueAtTime(0.02, ctx.currentTime + 0.08);
+  gain.gain.setValueAtTime(0.3, ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.08);
   gain.gain.exponentialRampToValueAtTime(0.005, ctx.currentTime + 0.2);
 
   osc.start(ctx.currentTime);
@@ -87,7 +87,7 @@ export function playSuccess() {
     osc.frequency.setValueAtTime(freq, now + idx * 0.05);
 
     gain.gain.setValueAtTime(0.0, now + idx * 0.05);
-    gain.gain.linearRampToValueAtTime(0.04, now + idx * 0.05 + 0.02);
+    gain.gain.linearRampToValueAtTime(0.24, now + idx * 0.05 + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.05 + duration);
 
     osc.start(now + idx * 0.05);
@@ -127,7 +127,7 @@ export function playFanfare() {
     const dur = isLast ? 0.5 : 0.25;
 
     gain.gain.setValueAtTime(0.0, now + step.start);
-    gain.gain.linearRampToValueAtTime(isLast ? 0.05 : 0.03, now + step.start + 0.02);
+    gain.gain.linearRampToValueAtTime(isLast ? 0.35 : 0.2, now + step.start + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.001, now + step.start + dur);
 
     osc.start(now + step.start);
@@ -165,7 +165,7 @@ export function playMegaCelebration() {
     osc.frequency.exponentialRampToValueAtTime(freq * 1.05, now + idx * 0.04 + 0.12);
 
     gain.gain.setValueAtTime(0.0, now + idx * 0.04);
-    gain.gain.linearRampToValueAtTime(0.04, now + idx * 0.04 + 0.02);
+    gain.gain.linearRampToValueAtTime(0.24, now + idx * 0.04 + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.04 + 0.15);
 
     osc.start(now + idx * 0.04);

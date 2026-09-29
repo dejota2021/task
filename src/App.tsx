@@ -444,6 +444,20 @@ export default function App() {
           setActiveSheetId(sheets[curIdx + 1].id);
         }
       }
+
+      // Shortcut [Tab] to toggle view between 'board' and 'analytics'
+      if (e.key === 'Tab' && !isTyping) {
+        e.preventDefault();
+        if (soundEnabled) playPop();
+        setActiveView(prev => prev === 'board' ? 'analytics' : 'board');
+      }
+
+      // Shortcut [Shift + N] to create a new sheet
+      if (e.shiftKey && (e.key === 'N' || e.key === 'n') && !isTyping) {
+        e.preventDefault();
+        if (soundEnabled) playPop();
+        setShowAddSheetInput(true);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -1007,52 +1021,40 @@ export default function App() {
     }
   };
 
-  // Highly premium interactive 3D parallax column tilt on mouse hover
-  const handleColumnMouseMove3D = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (window.innerWidth < 1024) return;
+  const handleGeneric3DMove = (e: React.MouseEvent<HTMLElement> | React.TouchEvent<HTMLElement>) => {
     const el = e.currentTarget;
     const rect = el.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    
+    let clientX = 0;
+    let clientY = 0;
+    
+    if ('touches' in e) {
+      if (e.touches.length === 0) return;
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
     const xc = rect.width / 2;
     const yc = rect.height / 2;
-    // Bounded smooth rotation
-    const rotateY = ((x - xc) / xc) * 7; // up to 7 degrees
-    const rotateX = -((y - yc) / yc) * 7;
     
-    el.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.015, 1.015, 1.015)`;
-    el.style.boxShadow = '0 30px 65px rgba(0, 0, 0, 0.65)';
-    el.style.transition = 'transform 0.15s cubic-bezier(0.25, 1, 0.5, 1)';
+    const rotateY = ((x - xc) / xc) * 16; 
+    const rotateX = -((y - yc) / yc) * 16;
+    
+    el.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02) translateZ(15px)`;
+    el.style.boxShadow = '0 35px 70px rgba(0, 0, 0, 0.75), 0 0 20px rgba(255, 159, 10, 0.08)';
+    el.style.transition = 'transform 0.15s cubic-bezier(0.25, 0.8, 0.25, 1)';
   };
 
-  const handleColumnMouseLeave3D = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleGeneric3DLeave = (e: React.MouseEvent<HTMLElement> | React.TouchEvent<HTMLElement>) => {
     const el = e.currentTarget;
     el.style.transform = '';
     el.style.boxShadow = '';
-    el.style.transition = 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)';
-  };
-
-  const handleGeneric3DMouseMove = (e: React.MouseEvent<HTMLElement>) => {
-    if (window.innerWidth < 1024) return;
-    const el = e.currentTarget;
-    const rect = el.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const xc = rect.width / 2;
-    const yc = rect.height / 2;
-    const rotateY = ((x - xc) / xc) * 25;
-    const rotateX = -((y - yc) / yc) * 25;
-    
-    el.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.025, 1.025, 1.025)`;
-    el.style.boxShadow = '0 30px 65px rgba(0, 0, 0, 0.65)';
-    el.style.transition = 'transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1)';
-  };
-
-  const handleGeneric3DMouseLeave = (e: React.MouseEvent<HTMLElement>) => {
-    const el = e.currentTarget;
-    el.style.transform = '';
-    el.style.boxShadow = '';
-    el.style.transition = 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)';
+    el.style.transition = 'transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)';
   };
 
   // Reorganize sheet position (swap with neighbor and update order)
@@ -1090,6 +1092,43 @@ export default function App() {
     } catch (err) {
       console.warn("Unable to save sheet order online:", err);
       handleFirestoreError(err, OperationType.UPDATE, `boards`);
+    }
+  };
+
+  // Reorganize column position (swap with neighbor within the active sheet)
+  const handleMoveColumn = async (colId: string, direction: 'left' | 'right') => {
+    const currentIndex = activeColumns.findIndex(c => c.id === colId);
+    if (currentIndex === -1) return;
+
+    const nextIndex = currentIndex + (direction === 'left' ? -1 : 1);
+    if (nextIndex < 0 || nextIndex >= activeColumns.length) return;
+
+    if (soundEnabled) playWoosh();
+
+    const updatedColumns = [...activeColumns];
+    const temp = updatedColumns[currentIndex];
+    updatedColumns[currentIndex] = updatedColumns[nextIndex];
+    updatedColumns[nextIndex] = temp;
+
+    const updatedSheets = sheets.map(s => {
+      if (s.id === activeSheetId) {
+        return { ...s, columns: updatedColumns };
+      }
+      return s;
+    });
+
+    setSheets(updatedSheets);
+    localStorage.setItem('sincrotask_sheets_list', JSON.stringify(updatedSheets));
+
+    if (isOfflineFallback) return;
+
+    try {
+      await updateDoc(doc(db, 'boards', activeSheetId), {
+        columns: updatedColumns
+      });
+    } catch (err) {
+      console.warn("Failed to update column order online:", err);
+      handleFirestoreError(err, OperationType.UPDATE, `boards/${activeSheetId}`);
     }
   };
 
@@ -1638,14 +1677,15 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3 column-3d-container">
           
           <div 
-            onMouseMove={handleGeneric3DMouseMove}
-            onMouseLeave={handleGeneric3DMouseLeave}
+            onMouseMove={handleGeneric3DMove}
+            onMouseLeave={handleGeneric3DLeave}
+            onTouchMove={handleGeneric3DMove}
+            onTouchEnd={handleGeneric3DLeave}
             className="flex items-center gap-2.5 column-3d-container px-2 py-1 rounded-xl cursor-pointer"
           >
             <div className="p-2 bg-[#FF9F0A]/15 border border-[#FF9F0A]/30 rounded-xl shadow-[0_0_15px_rgba(255,159,10,0.2)] flex items-center justify-center transition-all duration-300 hover:border-[#FF9F0A]/50">
               <ListTodo className="w-5 h-5 text-[#FF9F0A] filter drop-shadow-[0_0_4px_rgba(255,159,10,0.5)] cursor-pointer" />
             </div>
-            <span className="hidden sm:inline font-extrabold text-sm tracking-tight text-white">TaskPro <span className="text-[#FF9F0A] font-mono text-xs">3D</span></span>
           </div>
 
           {/* Quick toggle view */}
@@ -1762,16 +1802,20 @@ export default function App() {
           <>
             {/* Gamification Banner & Stat Indicators (Modeled after reference dark UI) */}
             <div 
-              onMouseMove={handleGeneric3DMouseMove}
-              onMouseLeave={handleGeneric3DMouseLeave}
+              onMouseMove={handleGeneric3DMove}
+              onMouseLeave={handleGeneric3DLeave}
+              onTouchMove={handleGeneric3DMove}
+              onTouchEnd={handleGeneric3DLeave}
               className="bg-[#18191c] p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-[#26282e] shadow-xl column-3d-container"
             >
               <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
                 
                 {/* Stat 1: Mayor Rendimiento / XP */}
                 <div 
-                  onMouseMove={handleGeneric3DMouseMove}
-                  onMouseLeave={handleGeneric3DMouseLeave}
+                  onMouseMove={handleGeneric3DMove}
+                  onMouseLeave={handleGeneric3DLeave}
+                  onTouchMove={handleGeneric3DMove}
+                  onTouchEnd={handleGeneric3DLeave}
                   className="bg-[#121315] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-[#222428] flex flex-col justify-between column-3d-container cursor-pointer"
                 >
                   <div className="text-[9px] sm:text-[10px] text-zinc-400 font-bold uppercase tracking-wider truncate">
@@ -1787,8 +1831,10 @@ export default function App() {
 
                 {/* Stat 2: Tasa de Eficiencia */}
                 <div 
-                  onMouseMove={handleGeneric3DMouseMove}
-                  onMouseLeave={handleGeneric3DMouseLeave}
+                  onMouseMove={handleGeneric3DMove}
+                  onMouseLeave={handleGeneric3DLeave}
+                  onTouchMove={handleGeneric3DMove}
+                  onTouchEnd={handleGeneric3DLeave}
                   className="bg-[#121315] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-[#222428] flex flex-col justify-between column-3d-container cursor-pointer"
                 >
                   <div className="text-[9px] sm:text-[10px] text-zinc-400 font-bold uppercase tracking-wider truncate">
@@ -1804,8 +1850,10 @@ export default function App() {
 
                 {/* Stat 3: Movimientos con Tareas */}
                 <div 
-                  onMouseMove={handleGeneric3DMouseMove}
-                  onMouseLeave={handleGeneric3DMouseLeave}
+                  onMouseMove={handleGeneric3DMove}
+                  onMouseLeave={handleGeneric3DLeave}
+                  onTouchMove={handleGeneric3DMove}
+                  onTouchEnd={handleGeneric3DLeave}
                   className="bg-[#121315] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-[#222428] flex flex-col justify-between column-3d-container cursor-pointer"
                 >
                   <div className="text-[9px] sm:text-[10px] text-zinc-400 font-bold uppercase tracking-wider truncate">
@@ -1997,8 +2045,8 @@ export default function App() {
           activeView === 'board' ? (
             <div key={`${activeSheetId}_${slideDirection}`} className={`flex flex-col gap-5 ${slideDirection === 'right' ? 'animate-slide-right' : 'animate-slide-left'}`}>
               
-              {/* Dynamic Columns Kanban Grid (Side-by-side on desktop!) */}
-              <div className="flex flex-col md:flex-row md:items-start gap-5 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-800">
+              {/* Dynamic Columns Kanban Grid (Centered and Floating on desktop if columns <= 3, otherwise left-aligned for scrollability!) */}
+              <div className={`flex flex-col md:flex-row md:items-start gap-7 overflow-x-auto pb-8 pt-3 scrollbar-thin scrollbar-thumb-slate-800 max-w-full mx-auto ${activeColumns.length <= 3 ? 'md:justify-center' : 'md:justify-start'}`}>
                 {activeColumns.map((col, idx) => {
                   const colTasks = tasks.filter(t => t.column === col.id);
                   const columnVibrantColor = getColumnVibrantColor(col, idx);
@@ -2006,8 +2054,10 @@ export default function App() {
                   return (
                     <div 
                       key={col.id} 
-                      onMouseMove={handleColumnMouseMove3D}
-                      onMouseLeave={handleColumnMouseLeave3D}
+                      onMouseMove={handleGeneric3DMove}
+                      onMouseLeave={handleGeneric3DLeave}
+                      onTouchMove={handleGeneric3DMove}
+                      onTouchEnd={handleGeneric3DLeave}
                       style={{ 
                         backgroundColor: `${columnVibrantColor}22`, 
                         borderColor: `${columnVibrantColor}B5`,
@@ -2148,6 +2198,26 @@ export default function App() {
                             {colTasks.length}
                           </span>
 
+                          {/* Column reordering controls (horizontal movement) */}
+                          <div className="flex items-center gap-0.5 bg-black/45 border border-zinc-800 rounded-lg p-0.5 shrink-0">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleMoveColumn(col.id, 'left'); }}
+                              disabled={idx === 0}
+                              className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-850 disabled:opacity-20 disabled:hover:text-zinc-400 cursor-pointer transition-colors"
+                              title="Mover columna a la izquierda"
+                            >
+                              <ChevronLeft className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleMoveColumn(col.id, 'right'); }}
+                              disabled={idx === activeColumns.length - 1}
+                              className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-850 disabled:opacity-20 disabled:hover:text-zinc-400 cursor-pointer transition-colors"
+                              title="Mover columna a la derecha"
+                            >
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
                           {/* Delete column button (available for all columns) */}
                           {(
                             deletingColumnId === col.id ? (
@@ -2181,21 +2251,6 @@ export default function App() {
 
                       {/* Tasks List within Column */}
                       <div className="flex flex-col gap-2.5 min-h-[150px]">
-                        {/* Inline Pending Task Creator (Visible at the top of the Pendientes column) */}
-                        {col.id === firstColId && (
-                          <button
-                            type="button"
-                            onClick={() => { if (soundEnabled) playPop(); setShowAddTask(true); }}
-                            className="w-full py-2.5 bg-[#121315]/80 hover:bg-[#18191c] border border-dashed border-[#2e3138] hover:border-[#FF9F0A]/50 text-zinc-300 hover:text-white transition-all rounded-xl flex items-center justify-center gap-1.5 cursor-pointer font-bold text-xs shadow-sm mb-1.5"
-                          >
-                            <Plus className="w-4 h-4 text-[#FF9F0A]" />
-                            <span>Agregar Pendiente</span>
-                            <kbd className="hidden md:inline-flex items-center px-1.5 py-0.5 text-[9px] font-mono font-medium text-[#FF9F0A] bg-black border border-[#2e3138] rounded-md">
-                              ⇧A
-                            </kbd>
-                          </button>
-                        )}
-
                         {colTasks.length === 0 ? (
                           <div className="py-6 text-center border border-dashed border-[#26282e] rounded-xl bg-[#121315]/40">
                             <p className="text-[11px] text-zinc-500">Vacío</p>
@@ -2508,14 +2563,12 @@ export default function App() {
 
       {/* FOOTER */}
       <footer 
-        onMouseMove={handleGeneric3DMouseMove}
-        onMouseLeave={handleGeneric3DMouseLeave}
-        className="border-t border-slate-900 py-5 bg-[#05070e] text-center mt-10 column-3d-container cursor-pointer"
-      >
-        <p className="text-slate-600 text-[10px] font-mono">
-          TaskPro · Optimizado para mobile y escritorio
-        </p>
-      </footer>
+        onMouseMove={handleGeneric3DMove}
+        onMouseLeave={handleGeneric3DLeave}
+        onTouchMove={handleGeneric3DMove}
+        onTouchEnd={handleGeneric3DLeave}
+        className="border-t border-slate-900 py-3 bg-[#05070e] text-center mt-10 column-3d-container cursor-pointer"
+      />
 
       {/* MODAL: Edit Sheet Name (No Emojis!) */}
       {editingSheet && (
@@ -3067,36 +3120,32 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isSelected, o
         transform: `translateX(${dragOffset}px) rotate(${dragOffset * 0.04}deg) perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
         transition: isDraggingCard.current ? 'none' : 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
         cursor: isDraggingCard.current ? 'grabbing' : 'grab',
-        borderColor: isSelected ? '#ff375f' : `${cardVibrantColor}B5`,
-        backgroundColor: isSelected ? 'rgba(255, 55, 95, 0.2)' : `${cardVibrantColor}35`,
-        boxShadow: isSelected 
-          ? `0 12px 30px -4px rgba(255, 55, 95, 0.45), inset 0 0 20px rgba(255, 55, 95, 0.25), 0 0 15px rgba(255, 55, 95, 0.2)`
-          : `0 12px 30px -4px ${cardVibrantColor}70, inset 0 0 20px ${cardVibrantColor}25, 0 0 15px ${cardVibrantColor}1F`
+        borderColor: `${cardVibrantColor}B5`,
+        backgroundColor: `${cardVibrantColor}35`,
+        boxShadow: `0 12px 30px -4px ${cardVibrantColor}70, inset 0 0 20px ${cardVibrantColor}25, 0 0 15px ${cardVibrantColor}1F`
       }}
-      className="task-card-3d p-4 rounded-xl border hover:border-white/80 shadow-md transform group flex flex-col gap-3 relative select-none touch-none min-h-[110px] h-auto flex-shrink-0"
+      className="task-card-3d p-2.5 sm:p-3 rounded-xl border hover:border-white/80 shadow-md transform group flex flex-col gap-1.5 relative select-none touch-none min-h-[65px] h-auto flex-shrink-0"
     >
       
-      <div className="flex items-center justify-end">
+      <div className="flex items-start justify-between gap-1.5 w-full">
+        <h4 className="font-extrabold text-xs sm:text-sm text-zinc-100 transition-colors leading-tight tracking-wide break-words whitespace-normal py-0.5 max-w-full text-left flex-1">
+          {task.title}
+        </h4>
         {task.column === lastColId && (
-          <span className="text-[9px] font-mono font-bold text-amber-300 bg-amber-950/60 border border-amber-500/30 px-1.5 py-0.5 rounded">
+          <span className="text-[8px] font-mono font-bold text-amber-300 bg-amber-950/60 border border-amber-500/30 px-1.5 py-0.5 rounded shrink-0">
             +1 XP
           </span>
         )}
       </div>
 
-      <div className="flex-1 min-w-0">
-        <h4 className="font-extrabold text-sm text-zinc-100 transition-colors leading-relaxed break-words whitespace-normal py-0.5">
-          {task.title}
-        </h4>
-        {task.description && (
-          <p className="text-[11px] text-zinc-300/90 leading-relaxed mt-1 break-words whitespace-normal">
-            {task.description}
-          </p>
-        )}
-      </div>
+      {task.description && (
+        <p className="text-[10px] sm:text-[11px] text-zinc-300/80 leading-relaxed mt-0.5 tracking-wide break-words whitespace-normal max-w-full text-left">
+          {task.description}
+        </p>
+      )}
 
       {/* Action Footer */}
-      <div className="flex items-center justify-end border-t border-slate-800/40 pt-2 mt-1 gap-2">
+      <div className="flex items-center justify-end border-t border-slate-800/40 pt-1.5 mt-0.5 gap-1.5">
         
         {/* Edit task pencil */}
         <button
