@@ -1724,22 +1724,25 @@ export default function App() {
       
       {/* TOP HEADER */}
       <header className="border-b border-[#22242a] bg-[#0c0d0f]/95 backdrop-blur-md sticky top-0 z-40">
-        <div className="w-full px-4 h-16 flex items-center justify-between gap-3 column-3d-container">
+        <div className="w-full px-4 h-16 grid grid-cols-3 items-center gap-3 column-3d-container">
           
-          <div 
-            onMouseMove={handleGeneric3DMove}
-            onMouseLeave={handleGeneric3DLeave}
-            onTouchMove={handleGeneric3DMove}
-            onTouchEnd={handleGeneric3DLeave}
-            className="flex items-center gap-2.5 column-3d-container px-2 py-1 rounded-xl cursor-pointer"
-          >
-            <div className="p-2 bg-[#FF9F0A]/15 border border-[#FF9F0A]/30 rounded-xl shadow-[0_0_15px_rgba(255,159,10,0.2)] flex items-center justify-center transition-all duration-300 hover:border-[#FF9F0A]/50">
-              <ListTodo className="w-5 h-5 text-[#FF9F0A] filter drop-shadow-[0_0_4px_rgba(255,159,10,0.5)] cursor-pointer" />
+          {/* LEFT SECTION: BRANDING LOGO */}
+          <div className="flex items-center gap-2.5 justify-self-start">
+            <div 
+              onMouseMove={handleGeneric3DMove}
+              onMouseLeave={handleGeneric3DLeave}
+              onTouchMove={handleGeneric3DMove}
+              onTouchEnd={handleGeneric3DLeave}
+              className="flex items-center gap-2.5 column-3d-container px-2 py-1 rounded-xl cursor-pointer"
+            >
+              <div className="p-2 bg-[#FF9F0A]/15 border border-[#FF9F0A]/30 rounded-xl shadow-[0_0_15px_rgba(255,159,10,0.2)] flex items-center justify-center transition-all duration-300 hover:border-[#FF9F0A]/50">
+                <ListTodo className="w-5 h-5 text-[#FF9F0A] filter drop-shadow-[0_0_4px_rgba(255,159,10,0.5)] cursor-pointer" />
+              </div>
             </div>
           </div>
 
-          {/* Quick toggle view */}
-          <div className="flex items-center bg-[#151619] p-1 rounded-xl border border-[#26282e]">
+          {/* CENTER SECTION: TABLERO / LOGROS SWITCH (Centrado de forma perfecta) */}
+          <div className="flex items-center bg-[#151619] p-1 rounded-xl border border-[#26282e] justify-self-center">
             <button
               onClick={() => { if (soundEnabled) playPop(); setActiveView('board'); }}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${activeView === 'board' ? 'bg-[#FF9F0A] text-black shadow-md shadow-[#FF9F0A]/20 font-black' : 'text-zinc-400 hover:text-white'}`}
@@ -1752,31 +1755,32 @@ export default function App() {
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${activeView === 'analytics' ? 'bg-[#FF9F0A] text-black shadow-md shadow-[#FF9F0A]/20 font-black' : 'text-zinc-400 hover:text-white'}`}
             >
               <BarChart3 className="w-3.5 h-3.5" />
-              <span>Gráficos</span>
+              <span>Logros</span>
             </button>
           </div>
 
-          {/* Undo / Redo controls */}
-          <div className="flex items-center gap-1 bg-[#151619] p-1 rounded-xl border border-[#26282e] column-3d-container">
-            <button
-              onClick={handleUndo}
-              disabled={undoStack.length === 0}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-[#FF9F0A] disabled:opacity-20 disabled:hover:text-zinc-400 cursor-pointer transition-all flex items-center justify-center"
-              title="Deshacer (Ctrl+Z)"
-            >
-              <Undo2 className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={handleRedo}
-              disabled={redoStack.length === 0}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-[#FF9F0A] disabled:opacity-20 disabled:hover:text-zinc-400 cursor-pointer transition-all flex items-center justify-center"
-              title="Hacer (Ctrl+Y)"
-            >
-              <Redo2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          {/* RIGHT SECTION: SYSTEM BUTTONS */}
+          <div className="flex items-center gap-2.5 justify-self-end">
+            {/* Undo / Redo controls */}
+            <div className="flex items-center gap-1 bg-[#151619] p-1 rounded-xl border border-[#26282e] column-3d-container">
+              <button
+                onClick={handleUndo}
+                disabled={undoStack.length === 0}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-[#FF9F0A] disabled:opacity-20 disabled:hover:text-zinc-400 cursor-pointer transition-all flex items-center justify-center"
+                title="Deshacer (Ctrl+Z)"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={handleRedo}
+                disabled={redoStack.length === 0}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-[#FF9F0A] disabled:opacity-20 disabled:hover:text-zinc-400 cursor-pointer transition-all flex items-center justify-center"
+                title="Hacer (Ctrl+Y)"
+              >
+                <Redo2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
-          <div className="flex items-center gap-2">
             <button
               onClick={() => { if (soundEnabled) playPop(); setIsVoiceAssistantOpen(true); }}
               className="hidden md:flex p-2 px-3 rounded-xl bg-[#FF9F0A]/15 border border-[#FF9F0A]/35 text-[#FF9F0A] hover:bg-[#FF9F0A]/25 hover:text-white transition-all cursor-pointer items-center gap-1.5 shadow-[0_0_12px_rgba(255,159,10,0.15)]"
@@ -1786,6 +1790,7 @@ export default function App() {
               <span className="text-[10px] font-extrabold tracking-wider uppercase">Voz IA</span>
               <kbd className="text-[9px] px-1.5 py-0.5 rounded bg-[#1e1507] border border-[#FF9F0A]/30 text-[#FF9F0A] font-mono font-bold">⇧V</kbd>
             </button>
+            
             <button 
               onClick={() => { setSoundEnabled(!soundEnabled); if (!soundEnabled) setTimeout(playPop, 50); }}
               className="p-2 rounded-xl bg-[#151619] border border-[#26282e] text-zinc-400 hover:text-white transition-all cursor-pointer"
@@ -1794,6 +1799,7 @@ export default function App() {
               {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             </button>
           </div>
+
         </div>
       </header>
 
@@ -2418,218 +2424,247 @@ export default function App() {
               </div>
             </div>
           ) : (
-            /* INTERACTIVE ANALYTICS PANEL (Exact reconstruction matching reference image) */
-            <div key={`${activeSheetId}_${slideDirection}`} className={`flex flex-col gap-5 ${slideDirection === 'right' ? 'animate-slide-right' : 'animate-slide-left'}`}>
+            /* DYNAMIC "LOGROS" VIEW (Reconstructed according to the user's instructions) */
+            <div key={`${activeSheetId}_${slideDirection}`} className={`flex flex-col gap-6 px-4 sm:px-6 md:px-8 max-w-full mx-auto ${slideDirection === 'right' ? 'animate-slide-right' : 'animate-slide-left'}`}>
               
-              {/* Header Title from Image */}
+              {/* Custom CSS Animation Style for Mascot Hand Wave */}
+              <style>{`
+                @keyframes waveArm {
+                  0%, 100% { transform: rotate(0deg); }
+                  50% { transform: rotate(-30deg); }
+                }
+                .animate-wave-arm {
+                  animation: waveArm 1.6s ease-in-out infinite;
+                  transform-origin: 67px 45px;
+                }
+                @keyframes bounceSlow {
+                  0%, 100% { transform: translateY(0); }
+                  50% { transform: translateY(-6px); }
+                }
+                .animate-bounce-slow {
+                  animation: bounceSlow 3s ease-in-out infinite;
+                }
+              `}</style>
+
+              {/* Title Section */}
               <div className="flex flex-col gap-1">
-                <h2 className="text-base sm:text-xl font-display font-extrabold text-white tracking-wider uppercase">
-                  ANÁLISIS Y GRÁFICOS
+                <h2 className="text-base sm:text-xl font-display font-extrabold text-white tracking-wider uppercase flex items-center gap-2">
+                  <Award className="w-5 h-5 text-[#FF9F0A] animate-pulse" />
+                  <span>LOGROS & COMPROMISOS</span>
                 </h2>
                 <p className="text-xs text-zinc-400 font-sans">
-                  Distribución y evolución mensual de tus tareas y proyectos
+                  Monitorea tus medallas ganadas y el progreso global de todas tus hojas de trabajo activas
                 </p>
               </div>
 
-              {/* Main Card Container */}
-              <div className="bg-[#18191c] border border-[#26282e] p-5 sm:p-7 rounded-3xl flex flex-col gap-6 shadow-2xl">
+              {/* Layout Content: Mascot & Global metrics */}
+              <div className="flex flex-col gap-6">
                 
-                {/* Header row with icon */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 bg-[#FF9F0A]/15 border border-[#FF9F0A]/30 rounded-2xl flex items-center justify-center text-[#FF9F0A]">
-                      <BarChart3 className="w-5 h-5" />
+                {/* 1. Animated Mascot Companion holding the completed sheets medal */}
+                <div className="flex flex-col md:flex-row items-center gap-6 bg-gradient-to-tr from-[#121315] to-[#1e1f24] border border-[#26282e] p-5 sm:p-6 rounded-3xl relative overflow-hidden group shadow-2xl">
+                  {/* Glowing light bleed in background */}
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-[#FF9F0A]/5 rounded-full blur-3xl pointer-events-none" />
+                  
+                  {/* Floating SVG Character Mascot */}
+                  <div className="w-28 h-28 shrink-0 relative flex items-center justify-center select-none">
+                    <svg className="w-full h-full animate-bounce-slow" viewBox="0 0 100 100">
+                      {/* Bouncing Floor Shadow */}
+                      <ellipse cx="50" cy="90" rx="18" ry="3.5" className="fill-black/50" />
+                      
+                      {/* Floating Robot Body */}
+                      <rect x="35" y="30" width="30" height="40" rx="10" className="fill-[#1b1c21] stroke-[#FF9F0A]/60 stroke-[1.5] shadow-inner" />
+                      
+                      {/* Futuristic glowing chest indicator */}
+                      <circle cx="50" cy="50" r="5" className="fill-[#FF9F0A] animate-pulse" />
+                      
+                      {/* Robot Head */}
+                      <circle cx="50" cy="20" r="14" className="fill-[#25272e] stroke-[#FF9F0A]/60 stroke-[1.5]" />
+                      
+                      {/* Glowing visor */}
+                      <rect x="42" y="14" width="16" height="11" rx="3.5" className="fill-zinc-950" />
+                      <circle cx="46" cy="19.5" r="1.5" className="fill-[#FF9F0A]" />
+                      <circle cx="54" cy="19.5" r="1.5" className="fill-[#FF9F0A]" />
+                      
+                      {/* Cute Head Antenna */}
+                      <line x1="50" y1="6" x2="50" y2="12" className="stroke-[#FF9F0A] stroke-[2]" />
+                      <circle cx="50" cy="5" r="2.5" className="fill-[#FF9F0A] animate-ping" />
+                      
+                      {/* Left Arm */}
+                      <path d="M 33 45 Q 26 53 32 62" fill="none" className="stroke-zinc-500 stroke-[2] stroke-linecap-round" />
+                      
+                      {/* Waving Right Arm */}
+                      <path d="M 67 45 Q 76 35 73 24" fill="none" className="stroke-[#FF9F0A] stroke-[2.5] stroke-linecap-round animate-wave-arm" />
+                      
+                      {/* Sparkly Waving Palm */}
+                      <circle cx="73" cy="24" r="3" className="fill-[#FFB340] animate-pulse" />
+                    </svg>
+                    
+                    {/* Floating medal with completed sheets count counter */}
+                    <div className="absolute -bottom-1 -right-1 w-14 h-14 bg-gradient-to-tr from-[#FFD60A] via-[#FF9F0A] to-[#FFB340] rounded-full border-2 border-black flex flex-col items-center justify-center shadow-lg shadow-[#FF9F0A]/35 animate-pulse select-none">
+                      <Award className="w-5 h-5 text-black filter drop-shadow-md" />
+                      <span className="text-[10px] font-mono font-black text-black -mt-0.5">{totalMedals}</span>
                     </div>
-                    <div>
-                      <h3 className="text-sm sm:text-base font-extrabold text-white">
-                        Análisis y Gráficos Visuales
-                      </h3>
-                      <p className="text-[11px] text-zinc-400">
-                        Distribución de tareas por columna / destino
-                      </p>
+                  </div>
+
+                  {/* Text Dialogue block */}
+                  <div className="flex-1 text-center md:text-left">
+                    <div className="flex items-center justify-center md:justify-start gap-2">
+                      <h4 className="text-sm sm:text-base font-extrabold text-white">Asistente de Logros SincroTask</h4>
+                      <span className="text-[8px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full uppercase tracking-widest animate-pulse">Compañero 3D</span>
+                    </div>
+                    <p className="text-zinc-300 text-xs mt-2.5 leading-relaxed font-medium">
+                      ¡Hola! Te doy la bienvenida a tu centro de **Logros**. Actualmente posees un total de <strong className="text-[#FF9F0A] font-black">{totalMedals} {totalMedals === 1 ? 'hoja completada' : 'hojas completadas'}</strong>. He archivado y ocultado tus hojas listas de este listado para que enfoques tu energía únicamente en los compromisos pendientes.
+                    </p>
+                    <div className="mt-3.5 flex flex-wrap gap-2 justify-center md:justify-start">
+                      <span className="text-[9px] font-mono font-bold text-zinc-400 bg-zinc-950 border border-zinc-800 px-2.5 py-1 rounded-lg">
+                        Mascota: Animada y Activa 🤖
+                      </span>
+                      <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
+                        Progreso: ¡Sigue cumpliendo metas! 🏆
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                {/* 3 Metrics Cards inside Panel */}
+                {/* 2. Global statistics overview across only active (incomplete) sheets */}
                 {(() => {
-                  const colStats = activeColumns.map((col, i) => {
-                    const count = tasks.filter(t => t.column === col.id).length;
-                    const color = getColumnVibrantColor(col, i);
-                    return { col, count, color };
-                  });
-                  const maxCol = colStats.reduce((max, cur) => cur.count > max.count ? cur : max, colStats[0] || { col: { title: 'General' }, count: 0 });
-                  const successRate = totalTasks > 0 ? Math.round((completedTasksCount / totalTasks) * 100) : 0;
-
-                  return (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {/* Metric 1 */}
-                      <div className="bg-[#121315] p-3.5 rounded-2xl border border-[#222428] flex flex-col justify-between">
-                        <span className="text-[11px] text-zinc-400 font-semibold">Mayor Carga / Destino</span>
-                        <span className="text-base sm:text-lg font-extrabold text-[#FF9F0A] mt-1 truncate">
-                          {maxCol?.col?.title || 'Sin tareas'}
-                        </span>
-                        <span className="text-[11px] text-zinc-500 font-mono mt-0.5">
-                          {maxCol?.count || 0} tareas en fila
-                        </span>
-                      </div>
-
-                      {/* Metric 2 */}
-                      <div className="bg-[#121315] p-3.5 rounded-2xl border border-[#222428] flex flex-col justify-between">
-                        <span className="text-[11px] text-zinc-400 font-semibold">Tasa de Eficiencia</span>
-                        <span className="text-base sm:text-lg font-extrabold text-[#30D158] mt-1 font-mono">
-                          {successRate}%
-                        </span>
-                        <span className="text-[11px] text-zinc-500 mt-0.5">
-                          del total de tareas
-                        </span>
-                      </div>
-
-                      {/* Metric 3 */}
-                      <div className="bg-[#121315] p-3.5 rounded-2xl border border-[#222428] flex flex-col justify-between sm:col-span-2 lg:col-span-1">
-                        <span className="text-[11px] text-zinc-400 font-semibold">Movimientos con Tareas</span>
-                        <span className="text-base sm:text-lg font-extrabold text-white mt-1">
-                          {totalTasks} {totalTasks === 1 ? 'movimiento' : 'movimientos'}
-                        </span>
-                        <span className="text-[11px] text-zinc-500 mt-0.5">
-                          {activeColumns.length} destinos activos
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Donut Chart (Exact vibrant multi-color segments from reference) */}
-                {(() => {
-                  const chartColors = ['#FF9F0A', '#64D2FF', '#FF375F', '#30D158', '#0A84FF', '#BF5AF2', '#FFD60A'];
-                  const segments = activeColumns.map((col, idx) => {
-                    const count = tasks.filter(t => t.column === col.id).length;
-                    const percent = totalTasks > 0 ? count / totalTasks : 0;
-                    const color = col.color || chartColors[idx % chartColors.length];
-                    return { col, count, percent, color };
+                  const incompleteSheets = sheets.filter(s => {
+                    const stats = sheetStats[s.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
+                    return !(stats.total > 0 && stats.pending === 0 && stats.progress === 0);
                   });
 
-                  let cumulativeOffset = 0;
-                  const circumference = 2 * Math.PI * 52; // r=52 -> ~326.72
+                  const incompleteSheetsStats = (() => {
+                    let completed = 0;
+                    let pending = 0;
+                    let progress = 0;
+                    let total = 0;
+                    incompleteSheets.forEach(sheet => {
+                      const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
+                      completed += stats.completed;
+                      pending += stats.pending;
+                      progress += stats.progress;
+                      total += stats.total;
+                    });
+                    return { completed, pending, progress, total };
+                  })();
 
                   return (
-                    <div className="flex flex-col items-center justify-center my-4">
-                      <div className="relative w-56 h-56 sm:w-64 sm:h-64 flex items-center justify-center">
-                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 140 140">
-                          {/* Background Ring */}
-                          <circle
-                            cx="70"
-                            cy="70"
-                            r="52"
-                            className="stroke-[#121315]"
-                            strokeWidth="14"
-                            fill="transparent"
-                          />
-
-                          {totalTasks > 0 ? (
-                            segments.map((seg, i) => {
-                              const dashLength = circumference * seg.percent;
-                              const offset = circumference * (1 - seg.percent);
-                              const rotation = cumulativeOffset * 360;
-                              cumulativeOffset += seg.percent;
-
-                              if (seg.count === 0) return null;
-
-                              return (
-                                <circle
-                                  key={seg.col.id || i}
-                                  cx="70"
-                                  cy="70"
-                                  r="52"
-                                  stroke={seg.color}
-                                  strokeWidth="14"
-                                  fill="transparent"
-                                  strokeDasharray={circumference}
-                                  strokeDashoffset={offset}
-                                  transform={`rotate(${rotation} 70 70)`}
-                                  className="transition-all duration-700 hover:opacity-80"
-                                  strokeLinecap="butt"
-                                />
-                              );
-                            })
-                          ) : (
-                            <circle
-                              cx="70"
-                              cy="70"
-                              r="52"
-                              stroke="#26282e"
-                              strokeWidth="14"
-                              fill="transparent"
-                            />
-                          )}
-                        </svg>
-
-                        {/* Center Metric */}
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-                          <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#8e8e93]">
-                            TOTAL TAREAS
-                          </span>
-                          <span className="text-2xl sm:text-3xl font-mono font-black text-white tabular-nums my-0.5">
-                            {totalTasks}
-                          </span>
-                          <span className="text-[10px] text-zinc-500 font-mono">
-                            {completedTasksCount} listas
-                          </span>
-                        </div>
+                    <div className="flex flex-col gap-3">
+                      <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">
+                        Conteo Global de Pendientes (Hojas Activas)
                       </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Table Breakdown matching "Destino / Categoría" & "Monto & Participación" */}
-                <div className="flex flex-col gap-2.5 pt-2">
-                  <div className="flex items-center justify-between px-3 text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
-                    <span>Destino / Columna</span>
-                    <span>Tareas & Participación</span>
-                  </div>
-
-                  <div className="space-y-2">
-                    {activeColumns.map((col, idx) => {
-                      const chartColors = ['#FF9F0A', '#64D2FF', '#FF375F', '#30D158', '#0A84FF', '#BF5AF2', '#FFD60A'];
-                      const count = tasks.filter(t => t.column === col.id).length;
-                      const percent = totalTasks > 0 ? Math.round((count / totalTasks) * 100) : 0;
-                      const colColor = col.color || chartColors[idx % chartColors.length];
-
-                      return (
-                        <div 
-                          key={col.id}
-                          className="flex items-center justify-between p-3.5 rounded-2xl bg-[#121315] border border-[#222428] hover:border-[#2f3238] transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span 
-                              className="w-3 h-3 rounded-full shrink-0 shadow-sm"
-                              style={{ backgroundColor: colColor }}
-                            />
-                            <span className="text-xs sm:text-sm font-bold text-white">
-                              {col.title}
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                        
+                        {/* Metric: Pendientes */}
+                        <div className="bg-[#121315] p-4 rounded-2xl border border-[#222428] flex items-center justify-between shadow-inner">
+                          <div>
+                            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Total Pendientes</span>
+                            <span className="text-xl sm:text-2xl font-mono font-black text-[#FF9F0A] tabular-nums mt-0.5 block">
+                              {incompleteSheetsStats.pending}
                             </span>
                           </div>
+                          <div className="p-2.5 bg-[#FF9F0A]/10 border border-[#FF9F0A]/20 rounded-xl text-[#FF9F0A]">
+                            <Clock className="w-4 h-4" />
+                          </div>
+                        </div>
 
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs font-mono font-bold text-zinc-300">
-                              {count} {count === 1 ? 'tarea' : 'tareas'}
+                        {/* Metric: En Proceso */}
+                        <div className="bg-[#121315] p-4 rounded-2xl border border-[#222428] flex items-center justify-between shadow-inner">
+                          <div>
+                            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">En Proceso</span>
+                            <span className="text-xl sm:text-2xl font-mono font-black text-[#64D2FF] tabular-nums mt-0.5 block">
+                              {incompleteSheetsStats.progress}
                             </span>
-                            <span 
-                              className="text-[10px] font-mono font-black px-2 py-0.5 rounded-md border"
-                              style={{ 
-                                backgroundColor: `${colColor}18`, 
-                                borderColor: `${colColor}40`,
-                                color: colColor 
+                          </div>
+                          <div className="p-2.5 bg-[#64D2FF]/10 border border-[#64D2FF]/20 rounded-xl text-[#64D2FF]">
+                            <TrendingUp className="w-4 h-4" />
+                          </div>
+                        </div>
+
+                        {/* Metric: Completados */}
+                        <div className="bg-[#121315] p-4 rounded-2xl border border-[#222428] flex items-center justify-between shadow-inner">
+                          <div>
+                            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Completados</span>
+                            <span className="text-xl sm:text-2xl font-mono font-black text-[#30D158] tabular-nums mt-0.5 block">
+                              {incompleteSheetsStats.completed}
+                            </span>
+                          </div>
+                          <div className="p-2.5 bg-[#30D158]/10 border border-[#30D158]/20 rounded-xl text-[#30D158]">
+                            <CheckCircle2 className="w-4 h-4" />
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* 3. Progressive list of active sheets (completed ones are fully hidden) */}
+                {(() => {
+                  const incompleteSheets = sheets.filter(s => {
+                    const stats = sheetStats[s.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
+                    return !(stats.total > 0 && stats.pending === 0 && stats.progress === 0);
+                  });
+
+                  return (
+                    <div className="flex flex-col gap-3.5 pt-2">
+                      <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">
+                        Progreso de Hojas Activas ({incompleteSheets.length})
+                      </div>
+                      
+                      <div className="flex flex-col gap-3">
+                        {incompleteSheets.map((sheet, idx) => {
+                          const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
+                          const percent = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
+                          
+                          return (
+                            <div 
+                              key={sheet.id}
+                              onClick={() => {
+                                if (soundEnabled) playPop();
+                                setActiveSheetId(sheet.id);
+                                setActiveView('board');
                               }}
+                              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-[#121315] border border-[#222428] hover:border-[#FF9F0A]/40 transition-all cursor-pointer group shadow-sm gap-3"
                             >
-                              {percent}%
-                            </span>
+                              <div className="flex items-center gap-3">
+                                <Layers className="w-4.5 h-4.5 text-zinc-550 group-hover:text-[#FF9F0A] transition-colors" />
+                                <div>
+                                  <span className="text-xs sm:text-sm font-bold text-white group-hover:text-[#FF9F0A] transition-colors">
+                                    {sheet.title}
+                                  </span>
+                                  <span className="text-[10px] text-zinc-550 block font-mono mt-0.5">
+                                    {stats.completed}/{stats.total} completadas • {stats.pending} pendientes • {stats.progress} en proceso
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Progress bar */}
+                              <div className="flex items-center gap-3 w-full sm:w-48 shrink-0">
+                                <div className="h-2 bg-zinc-950 border border-zinc-900 rounded-full flex-1 overflow-hidden">
+                                  <div 
+                                    className="h-full rounded-full transition-all duration-700 bg-gradient-to-r from-[#FF9F0A] to-amber-500" 
+                                    style={{ width: `${percent}%` }}
+                                  />
+                                </div>
+                                <span className="text-[10px] font-mono font-black text-[#FF9F0A] w-8 text-right shrink-0">{percent}%</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {incompleteSheets.length === 0 && (
+                          <div className="py-10 text-center border border-dashed border-[#222428] rounded-2xl bg-[#121315]/40 flex flex-col items-center justify-center gap-2">
+                            <Sparkles className="w-6 h-6 text-[#FF9F0A] animate-spin" />
+                            <p className="text-xs text-zinc-400 font-bold font-mono">¡Has alcanzado la gloria máxima! 🏆</p>
+                            <p className="text-[10px] text-zinc-550 font-mono">Todas tus hojas de trabajo se encuentran 100% completadas.</p>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
               </div>
 

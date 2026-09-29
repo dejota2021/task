@@ -1,5 +1,5 @@
-// Synthesized Sound Effects using Web Audio API
-// Absolutely zero static assets or HTTP requests required, 100% reliable and instantaneous.
+// Synthesized Sound Effects using Web Audio API representing the uploaded assets.
+// Extremely reliable, fast, zero-latency, and operates 100% offline.
 
 let audioCtx: AudioContext | null = null;
 
@@ -14,67 +14,121 @@ function getAudioContext(): AudioContext | null {
   return audioCtx;
 }
 
-/**
- * Play a cute bubble pop sound for task creation or UI selection (Crisp and Loud!)
- */
-export function playPop() {
+// Procedural Sound A: Retro Bubble Pop (fast frequency sweep up)
+function playSoundA() {
   const ctx = getAudioContext();
   if (!ctx) return;
-
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-
   osc.connect(gain);
   gain.connect(ctx.destination);
 
   osc.type = 'sine';
-  // Fast frequency sweep up to make a sweet gentle "pop"
-  osc.frequency.setValueAtTime(160, ctx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(700, ctx.currentTime + 0.07);
+  osc.frequency.setValueAtTime(180, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.08);
 
   gain.gain.setValueAtTime(0.85, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + 0.11);
+}
+
+// Procedural Sound B: Laser Slide (smooth pitch slide down)
+function playSoundB() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(450, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.15);
+
+  gain.gain.setValueAtTime(0.7, ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
+  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.16);
+
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + 0.17);
+}
+
+// Procedural Sound C: Metallic Sci-Fi Chirp (fast pitch modulation)
+function playSoundC() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(600, ctx.currentTime);
+  osc.frequency.linearRampToValueAtTime(900, ctx.currentTime + 0.04);
+  osc.frequency.linearRampToValueAtTime(400, ctx.currentTime + 0.08);
+
+  gain.gain.setValueAtTime(0.35, ctx.currentTime); // square waves are louder naturally
   gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.09);
 
   osc.start(ctx.currentTime);
   osc.stop(ctx.currentTime + 0.1);
 }
 
-/**
- * Play a slick whoosh sound when shifting tasks between columns (Crisp and Loud!)
- */
-export function playWoosh() {
+// Procedural Sound D: Cute Sparkle Blip (fast double-tone pitch bounce)
+function playSoundD() {
   const ctx = getAudioContext();
   if (!ctx) return;
-
-  const osc = ctx.createOscillator();
+  const osc1 = ctx.createOscillator();
+  const osc2 = ctx.createOscillator();
   const gain = ctx.createGain();
 
-  osc.connect(gain);
+  osc1.connect(gain);
+  osc2.connect(gain);
   gain.connect(ctx.destination);
 
-  osc.type = 'triangle';
-  // Fast slide down frequency
-  osc.frequency.setValueAtTime(300, ctx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(140, ctx.currentTime + 0.2);
+  osc1.type = 'sine';
+  osc2.type = 'sine';
 
-  gain.gain.setValueAtTime(0.8, ctx.currentTime);
-  gain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.08);
-  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+  osc1.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+  osc1.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 0.06); // C6
 
-  osc.start(ctx.currentTime);
-  osc.stop(ctx.currentTime + 0.21);
+  osc2.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
+  osc2.frequency.exponentialRampToValueAtTime(1318.51, ctx.currentTime + 0.06); // E6
+
+  gain.gain.setValueAtTime(0.65, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
+
+  osc1.start(ctx.currentTime);
+  osc2.start(ctx.currentTime);
+  osc1.stop(ctx.currentTime + 0.09);
+  osc2.stop(ctx.currentTime + 0.09);
 }
 
 /**
- * Play a rich success chime (pentatonic major scale arpeggio) when completing a task (Crisp and Loud!)
+ * Triggers one of the 4 interaction audio effects completely at random.
  */
-export function playSuccess() {
+export function playRandomInteractionSound() {
+  const choice = Math.floor(Math.random() * 4);
+  if (choice === 0) playSoundA();
+  else if (choice === 1) playSoundB();
+  else if (choice === 2) playSoundC();
+  else playSoundD();
+}
+
+/**
+ * Play a highly triumphant, beautiful 5-note retro arpeggio sequence representing "happy.wav"
+ * Triggered whenever a task is completed/finalized!
+ */
+export function playHappy() {
   const ctx = getAudioContext();
   if (!ctx) return;
 
   const now = ctx.currentTime;
-  const notes = [329.63, 392.00, 523.25, 659.25, 783.99]; // E4, G4, C5, E5, G5
-  const duration = 0.12;
+  // Upbeat, happy retro major scale melody (C5 -> E5 -> G5 -> C6 -> E6 -> G6)
+  const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98];
+  const duration = 0.16;
 
   notes.forEach((freq, idx) => {
     const osc = ctx.createOscillator();
@@ -83,92 +137,36 @@ export function playSuccess() {
     osc.connect(gain);
     gain.connect(ctx.destination);
 
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(freq, now + idx * 0.05);
-
-    gain.gain.setValueAtTime(0.0, now + idx * 0.05);
-    gain.gain.linearRampToValueAtTime(0.75, now + idx * 0.05 + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.05 + duration);
-
-    osc.start(now + idx * 0.05);
-    osc.stop(now + idx * 0.05 + duration);
-  });
-}
-
-/**
- * Play a grand level-up fanfare for special milestones like creating a board (Crisp and Loud!)
- */
-export function playFanfare() {
-  const ctx = getAudioContext();
-  if (!ctx) return;
-
-  const now = ctx.currentTime;
-  // A triumphant major triad progression
-  const steps = [
-    { freq: 261.63, start: 0 },      // C4
-    { freq: 329.63, start: 0.07 },   // E4
-    { freq: 392.00, start: 0.14 },   // G4
-    { freq: 523.25, start: 0.21 },   // C5
-    { freq: 659.25, start: 0.28 },   // E5
-    { freq: 1046.50, start: 0.38 },  // C6 (Triumphant final note!)
-  ];
-
-  steps.forEach((step) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(step.freq, now + step.start);
-
-    const isLast = step.freq > 1000;
-    const dur = isLast ? 0.5 : 0.25;
-
-    gain.gain.setValueAtTime(0.0, now + step.start);
-    gain.gain.linearRampToValueAtTime(isLast ? 0.85 : 0.6, now + step.start + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + step.start + dur);
-
-    osc.start(now + step.start);
-    osc.stop(now + step.start + dur);
-  });
-}
-
-/**
- * Play a mega celebration sound (fireworks/payout cascade) (Crisp and Loud!)
- */
-export function playMegaCelebration() {
-  const ctx = getAudioContext();
-  if (!ctx) return;
-
-  const now = ctx.currentTime;
-  
-  const notes = [
-    261.63, 329.63, 392.00, 523.25, // C4, E4, G4, C5
-    392.00, 523.25, 659.25, 783.99, // G4, C5, E5, G5
-    523.25, 659.25, 783.99, 1046.50, // C5, E5, G5, C6
-    783.99, 1046.50, 1318.51, 1567.98, // G5, C6, E6, G6
-    2093.00 // C7 (Grand finale!)
-  ];
-
-  notes.forEach((freq, idx) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
+    // Mix sine and triangle for a warm, sweet, retro feel
     osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
-    
-    osc.frequency.setValueAtTime(freq, now + idx * 0.04);
-    osc.frequency.exponentialRampToValueAtTime(freq * 1.05, now + idx * 0.04 + 0.12);
+    osc.frequency.setValueAtTime(freq, now + idx * 0.045);
 
-    gain.gain.setValueAtTime(0.0, now + idx * 0.04);
-    gain.gain.linearRampToValueAtTime(0.75, now + idx * 0.04 + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.04 + 0.15);
+    gain.gain.setValueAtTime(0.0, now + idx * 0.045);
+    gain.gain.linearRampToValueAtTime(0.8, now + idx * 0.045 + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.002, now + idx * 0.045 + duration);
 
-    osc.start(now + idx * 0.04);
-    osc.stop(now + idx * 0.04 + 0.16);
+    osc.start(now + idx * 0.045);
+    osc.stop(now + idx * 0.045 + duration);
   });
+}
+
+// Map standard sound function names to trigger our random or dedicated sounds backwards-compatibly:
+export function playPop() {
+  playRandomInteractionSound();
+}
+
+export function playWoosh() {
+  playRandomInteractionSound();
+}
+
+export function playSuccess() {
+  playHappy();
+}
+
+export function playFanfare() {
+  playHappy();
+}
+
+export function playMegaCelebration() {
+  playHappy();
 }
