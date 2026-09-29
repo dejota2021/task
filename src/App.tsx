@@ -33,7 +33,9 @@ import {
   CircleDot,
   AlertCircle,
   Pencil,
-  Settings
+  Settings,
+  Mic,
+  MicOff
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from './firebase';
 import { playPop, playWoosh, playSuccess, playFanfare } from './sound';
@@ -153,6 +155,15 @@ export default function App() {
 
   // Cache stats of sheets
   const [sheetStats, setSheetStats] = useState<{[key: string]: { total: number; completed: number; pending: number; progress: number }}>({});
+
+  // AI Voice Control states
+  const [isVoiceAssistantOpen, setIsVoiceAssistantOpen] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceText, setVoiceText] = useState('');
+  const [voiceError, setVoiceError] = useState('');
+  const [voiceSuccessMessage, setVoiceSuccessMessage] = useState('');
+  const [isVoiceProcessing, setIsVoiceProcessing] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   // Active sheet columns list (resolved dynamically)
   const activeSheet = sheets.find(s => s.id === activeSheetId) || sheets[0];
@@ -504,6 +515,254 @@ export default function App() {
     } catch (err) {
       console.warn("Unable to sync sheet deletion online:", err);
       handleFirestoreError(err, OperationType.DELETE, `boards/${sheetIdToDelete}`);
+    }
+  };
+
+  // ==========================================
+  // AI VOICE CONTROL ASSISTANT LOGIC
+  // ==========================================
+  const executeVoiceActions = async (actions: any[], feedback: string) => {
+    let currentActiveSheetId = activeSheetId;
+    let currentSheets = [...sheets];
+    let currentTasks = [...tasks];
+
+    for (const action of actions) {
+      if (action.type === 'create_sheet') {
+        const title = action.title?.trim();
+        if (title) {
+          const newId = 'sheet_' + Math.random().toString(36).substr(2, 9);
+          const emoji = action.emoji || '🎯';
+          const newSheet: Sheet = {
+            id: newId,
+            title,
+            emoji,
+            createdAt: Date.now(),
+            columns: DEFAULT_COLUMNS,
+            order: currentSheets.length
+          };
+          currentSheets = [...currentSheets, newSheet];
+          setSheets(currentSheets);
+          localStorage.setItem('sincrotask_sheets_list', JSON.stringify(currentSheets));
+          currentActiveSheetId = newId;
+          setActiveSheetId(newId);
+
+          if (!isOfflineFallback) {
+            try {
+              await setDoc(doc(db, 'boards', newId), {
+                title,
+                emoji,
+                createdAt: newSheet.createdAt,
+                columns: DEFAULT_COLUMNS,
+                order: newSheet.order
+              });
+            } catch (err) {
+              console.warn("Unable to sync new sheet:", err);
+            }
+          }
+        }
+      }
+
+      else if (action.type === 'switch_sheet') {
+        const title = action.title?.toLowerCase()?.trim();
+        const id = action.sheetId;
+        const found = currentSheets.find(s => s.id === id || s.title.toLowerCase().trim() === title);
+        if (found) {
+          currentActiveSheetId = found.id;
+          setActiveSheetId(found.id);
+        }
+      }
+
+      else if (action.type === 'add_tasks') {
+        const titlesToAdd = Array.isArray(action.titles) ? action.titles : [];
+        if (titlesToAdd.length > 0 && currentActiveSheetId) {
+          const firstColId = activeColumns[0]?.id || 'pending';
+          const newTasksList: Task[] = [];
+
+          for (const titleText of titlesToAdd) {
+            if (!titleText.trim()) continue;
+            const tempId = 'task_' + Math.random().toString(36).substr(2, 9);
+            const newTask: Task = {
+              id: tempId,
+              title: titleText.trim(),
+              description: '',
+              column: firstColId,
+              createdAt: new Date()
+            };
+            newTasksList.push(newTask);
+
+            if (!isOfflineFallback) {
+              try {
+                const tasksRef = collection(db, 'boards', currentActiveSheetId, 'tasks');
+                await addDoc(tasksRef, {
+                  title: newTask.title,
+                  description: '',
+                  column: newTask.column,
+                  points: 1,
+                  createdAt: newTask.createdAt
+                });
+              } catch (err) {
+                console.warn("Firestore error adding task:", err);
+              }
+            }
+          }
+
+          if (currentActiveSheetId === activeSheetId) {
+            currentTasks = [...newTasksList, ...currentTasks];
+            setTasks(currentTasks);
+            localStorage.setItem(`sincrotask_tasks_backup_${currentActiveSheetId}`, JSON.stringify(currentTasks));
+          }
+        }
+      }
+
+      else if (action.type === 'delete_tasks') {
+        const titlesToDelete = Array.isArray(action.titles) ? action.titles.map((t: string) => t.toLowerCase().trim()) : [];
+        if (titlesToDelete.length > 0 && currentActiveSheetId) {
+          const tasksToKeep: Task[] = [];
+          const tasksToRemove: Task[] = [];
+
+          for (const t of currentTasks) {
+            const lowTitle = t.title.toLowerCase().trim();
+            if (titlesToDelete.some((titleDel: string) => lowTitle.includes(titleDel) || titleDel.includes(lowTitle))) {
+              tasksToRemove.push(t);
+            } else {
+              tasksToKeep.push(t);
+            }
+          }
+
+          if (tasksToRemove.length > 0) {
+            if (currentActiveSheetId === activeSheetId) {
+              currentTasks = tasksToKeep;
+              setTasks(currentTasks);
+              localStorage.setItem(`sincrotask_tasks_backup_${currentActiveSheetId}`, JSON.stringify(currentTasks));
+            }
+
+            if (!isOfflineFallback) {
+              for (const taskToRemove of tasksToRemove) {
+                try {
+                  await deleteDoc(doc(db, 'boards', currentActiveSheetId, 'tasks', taskToRemove.id));
+                } catch (err) {
+                  console.warn("Firestore error deleting task:", err);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      else if (action.type === 'toggle_sound') {
+        if (typeof action.enabled === 'boolean') {
+          setSoundEnabled(action.enabled);
+        }
+      }
+    }
+
+    if (soundEnabled) playSuccess();
+
+    // Trigger local speech read-back
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(feedback);
+      utterance.lang = 'es-ES';
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const handleStartVoiceRecognition = () => {
+    setVoiceError('');
+    setVoiceSuccessMessage('');
+    setVoiceText('');
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setVoiceError('Tu navegador no es compatible con reconocimiento de voz.');
+      return;
+    }
+
+    if (soundEnabled) playPop();
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'es-ES';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onresult = (e: any) => {
+      let transcript = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        transcript += e.results[i][0].transcript;
+      }
+      setVoiceText(transcript);
+    };
+
+    recognition.onerror = (e: any) => {
+      console.error("Speech Recognition Error:", e);
+      setVoiceError('Error de captura de voz. Inténtalo de nuevo.');
+      setIsListening(false);
+    };
+
+    recognition.onend = async () => {
+      setIsListening(false);
+      // Wait a short moment to make sure the state is fully set
+      setTimeout(async () => {
+        if (recognitionRef.current) {
+          const finalPrompt = voiceText || '';
+          if (finalPrompt.trim()) {
+            await processVoiceCommand(finalPrompt);
+          }
+        }
+      }, 50);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  const handleStopVoiceRecognition = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    setIsListening(false);
+  };
+
+  const processVoiceCommand = async (command: string) => {
+    setIsVoiceProcessing(true);
+    setVoiceError('');
+    try {
+      const response = await fetch('/api/ai/voice-control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: command,
+          existingSheets: sheets,
+          existingColumns: activeColumns
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('No se pudo procesar la instrucción por voz.');
+      }
+
+      const result = await response.json();
+      if (result.actions && result.actions.length > 0) {
+        await executeVoiceActions(result.actions, result.speechFeedback);
+        setVoiceSuccessMessage(result.speechFeedback);
+      } else {
+        setVoiceSuccessMessage(result.speechFeedback || 'Comando entendido, pero no se generaron acciones.');
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(result.speechFeedback || 'No entendí esa instrucción.');
+          utterance.lang = 'es-ES';
+          window.speechSynthesis.speak(utterance);
+        }
+      }
+    } catch (err: any) {
+      console.error(err);
+      setVoiceError(err.message || 'Error al procesar el comando de voz.');
+    } finally {
+      setIsVoiceProcessing(false);
     }
   };
 
@@ -928,6 +1187,14 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => { if (soundEnabled) playPop(); setIsVoiceAssistantOpen(true); }}
+              className="p-2 px-3 rounded-xl bg-indigo-600/15 border border-indigo-500/35 text-indigo-400 hover:text-white transition-all cursor-pointer flex items-center gap-1.5 shadow-[0_0_12px_rgba(99,102,241,0.15)] hover:border-indigo-400"
+              title="Asistente de Voz IA"
+            >
+              <Mic className="w-4 h-4 animate-pulse text-indigo-400" />
+              <span className="text-[10px] font-extrabold tracking-wider uppercase hidden sm:inline">Voz IA</span>
+            </button>
             <button 
               onClick={() => { setSoundEnabled(!soundEnabled); if (!soundEnabled) setTimeout(playPop, 50); }}
               className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-all cursor-pointer"
@@ -1547,6 +1814,143 @@ export default function App() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* MODAL: AI VOICE ASSISTANT */}
+      {isVoiceAssistantOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fade-in">
+          <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl w-full max-w-md p-6 relative shadow-[0_20px_50px_rgba(99,102,241,0.2)] animate-scale-up text-white flex flex-col gap-5 overflow-hidden">
+            <button 
+              type="button"
+              onClick={() => { if (soundEnabled) playPop(); setIsVoiceAssistantOpen(false); handleStopVoiceRecognition(); }}
+              className="absolute top-4 right-4 text-zinc-400 hover:text-white p-1 rounded-lg cursor-pointer transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-indigo-600/20 border border-indigo-500/30 rounded-xl shadow-[0_0_15px_rgba(99,102,241,0.15)] flex items-center justify-center text-indigo-400">
+                <Mic className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <h3 className="text-base font-extrabold text-white tracking-tight">
+                  Control de Voz Inteligente IA
+                </h3>
+                <p className="text-[10px] text-zinc-400">
+                  Controla tu tablero 3D con comandos de voz naturales.
+                </p>
+              </div>
+            </div>
+
+            {/* Glowing active micro visualizer */}
+            <div className="flex flex-col items-center justify-center py-6 bg-zinc-950/40 border border-zinc-850/60 rounded-2xl relative overflow-hidden">
+              <div className="absolute inset-0 bg-radial-gradient from-indigo-600/5 to-transparent opacity-40 pointer-events-none" />
+              
+              <button
+                type="button"
+                onClick={isListening ? handleStopVoiceRecognition : handleStartVoiceRecognition}
+                disabled={isVoiceProcessing}
+                className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-500 cursor-pointer ${
+                  isListening 
+                    ? 'bg-rose-600 shadow-[0_0_35px_rgba(225,29,72,0.65)] animate-pulse' 
+                    : isVoiceProcessing
+                      ? 'bg-zinc-800 opacity-50 cursor-not-allowed'
+                      : 'bg-indigo-600 hover:bg-indigo-500 shadow-[0_0_25px_rgba(99,102,241,0.4)]'
+                }`}
+              >
+                {isListening ? (
+                  <MicOff className="w-8 h-8 text-white" />
+                ) : (
+                  <Mic className="w-8 h-8 text-white" />
+                )}
+              </button>
+
+              <div className="text-center mt-4 min-h-[40px] px-4">
+                {isListening ? (
+                  <span className="text-xs font-mono text-rose-450 font-bold animate-pulse">
+                    Escuchando voz... Habla ahora
+                  </span>
+                ) : isVoiceProcessing ? (
+                  <div className="flex items-center gap-1.5 justify-center">
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <span className="text-xs font-mono text-indigo-400 font-bold">IA interpretando comandos...</span>
+                  </div>
+                ) : (
+                  <span className="text-xs font-mono text-zinc-400">
+                    Toca el micrófono para hablar
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Live transcription feedback */}
+            {voiceText && (
+              <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800/80 animate-fade-in flex flex-col gap-1 text-left">
+                <span className="text-[9px] font-mono font-bold text-indigo-400 uppercase tracking-wider">Transcripción</span>
+                <p className="text-xs italic text-zinc-350 leading-relaxed">
+                  "{voiceText}"
+                </p>
+              </div>
+            )}
+
+            {/* Success or Feedback read back */}
+            {voiceSuccessMessage && (
+              <div className="bg-emerald-950/20 border border-emerald-900/40 p-3.5 rounded-xl animate-fade-in flex flex-col gap-1 text-left">
+                <span className="text-[9px] font-mono font-bold text-emerald-400 uppercase tracking-wider">Acción Realizada</span>
+                <p className="text-xs text-zinc-300 leading-normal font-sans font-semibold">
+                  {voiceSuccessMessage}
+                </p>
+              </div>
+            )}
+
+            {/* Errors if any */}
+            {voiceError && (
+              <div className="bg-rose-950/30 border border-rose-900/40 p-3.5 rounded-xl animate-fade-in flex items-center gap-2 text-rose-400 text-left">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span className="text-xs font-semibold leading-snug">{voiceError}</span>
+              </div>
+            )}
+
+            {/* Command guide */}
+            <div className="border-t border-zinc-850 pt-4 text-left">
+              <span className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block mb-2.5">
+                Comandos de Voz de Ejemplo:
+              </span>
+              <div className="grid grid-cols-1 gap-2 max-h-[140px] overflow-y-auto pr-1">
+                <div 
+                  onClick={() => { if (!isListening && !isVoiceProcessing) processVoiceCommand("crear hoja proyectos y agregar las tareas comprar cafe y llamar a juan"); }}
+                  className="p-2 rounded-xl bg-zinc-950/55 hover:bg-zinc-950 border border-zinc-850 hover:border-indigo-500/25 cursor-pointer text-[11px] text-zinc-400 hover:text-white transition-all flex flex-col gap-0.5"
+                >
+                  <span className="text-[9px] text-indigo-400 font-bold uppercase tracking-wider">Crear y agregar lotes</span>
+                  <span>"crear hoja proyectos y agregar las tareas comprar cafe y llamar a juan"</span>
+                </div>
+                <div 
+                  onClick={() => { if (!isListening && !isVoiceProcessing) processVoiceCommand("agregar pendientes comprar leche y comprar pan"); }}
+                  className="p-2 rounded-xl bg-zinc-950/55 hover:bg-zinc-950 border border-zinc-850 hover:border-indigo-500/25 cursor-pointer text-[11px] text-zinc-400 hover:text-white transition-all flex flex-col gap-0.5"
+                >
+                  <span className="text-[9px] text-indigo-400 font-bold uppercase tracking-wider">Agregar varios</span>
+                  <span>"agregar pendientes comprar leche y comprar pan"</span>
+                </div>
+                <div 
+                  onClick={() => { if (!isListening && !isVoiceProcessing) processVoiceCommand("eliminar tareas comprar cafe y comprar leche"); }}
+                  className="p-2 rounded-xl bg-zinc-950/55 hover:bg-zinc-950 border border-zinc-850 hover:border-indigo-500/25 cursor-pointer text-[11px] text-zinc-400 hover:text-white transition-all flex flex-col gap-0.5"
+                >
+                  <span className="text-[9px] text-indigo-400 font-bold uppercase tracking-wider">Eliminar varios</span>
+                  <span>"eliminar tareas comprar cafe y comprar leche"</span>
+                </div>
+                <div 
+                  onClick={() => { if (!isListening && !isVoiceProcessing) processVoiceCommand("desactivar sonidos"); }}
+                  className="p-2 rounded-xl bg-zinc-950/55 hover:bg-zinc-950 border border-zinc-850 hover:border-indigo-500/25 cursor-pointer text-[11px] text-zinc-400 hover:text-white transition-all flex flex-col gap-0.5"
+                >
+                  <span className="text-[9px] text-indigo-400 font-bold uppercase tracking-wider">Control de Ajustes</span>
+                  <span>"desactivar sonidos" / "activar sonidos"</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
