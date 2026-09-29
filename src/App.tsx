@@ -950,13 +950,46 @@ export default function App() {
             <p className="text-zinc-400 text-xs max-w-sm mb-6">
               Organiza tus pendientes creando una hoja colaborativa. Podrás agregar columnas personalizadas y tareas con efectos 3D.
             </p>
-            <button
-              onClick={() => { if (soundEnabled) playPop(); setShowAddSheetInput(true); }}
-              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-600/20 cursor-pointer flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Crear mi Primera Hoja</span>
-            </button>
+            {showAddSheetInput ? (
+              <form onSubmit={handleAddSheet} className="flex flex-col sm:flex-row items-center gap-2.5 p-3 bg-zinc-950 border border-zinc-800 rounded-2xl animate-scale-up shadow-2xl max-w-md w-full">
+                <div className="flex items-center gap-2 flex-1 w-full">
+                  <span className="text-xl p-1 bg-zinc-900 border border-zinc-800 rounded-lg shrink-0">{newSheetEmoji}</span>
+                  <input 
+                    type="text" 
+                    value={newSheetTitle}
+                    onChange={(e) => setNewSheetTitle(e.target.value)}
+                    placeholder="Nombre de tu primera hoja..."
+                    maxLength={20}
+                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:border-indigo-500 text-white placeholder:text-zinc-500 flex-1 w-full"
+                    autoFocus
+                    required
+                  />
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => { if (soundEnabled) playPop(); setShowAddSheetInput(false); }}
+                    className="px-3 py-2 text-xs font-bold text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl cursor-pointer transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/10 cursor-pointer"
+                  >
+                    Crear Hoja
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <button
+                onClick={() => { if (soundEnabled) playPop(); setShowAddSheetInput(true); }}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-600/20 cursor-pointer flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Crear mi Primera Hoja</span>
+              </button>
+            )}
           </div>
         ) : (
           <>
