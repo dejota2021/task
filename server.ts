@@ -16,6 +16,105 @@ const ai = new GoogleGenAI({
   }
 });
 
+// Rule-based fallback parser for high-speed, 100% resilient Spanish voice recognition
+function parseVoiceCommandFallback(text: string, sheets: any[], columns: any[]) {
+  const clean = text.trim();
+  const lower = clean.toLowerCase();
+  const actions: any[] = [];
+  let speechFeedback = '';
+
+  // 1. Toggle sounds
+  if (lower.includes('desactivar sonido') || lower.includes('quitar sonido') || lower.includes('silenciar')) {
+    actions.push({ type: 'toggle_sound', enabled: false });
+    return { actions, speechFeedback: 'Sonidos desactivados.' };
+  }
+  if (lower.includes('activar sonido') || lower.includes('poner sonido') || lower.includes('con sonido')) {
+    actions.push({ type: 'toggle_sound', enabled: true });
+    return { actions, speechFeedback: 'Sonidos activados.' };
+  }
+
+  // 2. Create sheet
+  const sheetCreateMatch = lower.match(/(?:crear|crea|nueva|nuevo)\s+(?:hoja|tablero|pizarra)\s+([a-záéíóúñ0-9\s]+?)(?:\s+y\s+(?:agregar|crear|pon)|\s*$)/i);
+  if (sheetCreateMatch && sheetCreateMatch[1]) {
+    const sheetTitle = sheetCreateMatch[1].trim();
+    if (sheetTitle) {
+      actions.push({
+        type: 'create_sheet',
+        title: sheetTitle.charAt(0).toUpperCase() + sheetTitle.slice(1),
+        emoji: '🎯'
+      });
+      speechFeedback = `Creé la hoja "${sheetTitle}".`;
+    }
+  }
+
+  // 3. Delete tasks
+  const deleteMatch = lower.match(/(?:eliminar|borrar|quitar|sacar)\s+(?:tarea|tareas|pendiente|pendientes)?\s*(.+)/i);
+  if (deleteMatch && deleteMatch[1] && !lower.includes('crear hoja')) {
+    const rawItems = deleteMatch[1].trim();
+    const titles = rawItems
+      .split(/\s+y\s+|\s+e\s+|,\s*/i)
+      .map(t => t.replace(/^(?:la|el|las|los|de|mi)\s+/i, '').trim())
+      .filter(t => t.length > 0);
+
+    if (titles.length > 0) {
+      actions.push({ type: 'delete_tasks', titles });
+      return {
+        actions,
+        speechFeedback: `Eliminé ${titles.length === 1 ? `el pendiente "${titles[0]}"` : `${titles.length} pendientes`}.`
+      };
+    }
+  }
+
+  // 4. Add tasks (e.g. "agregar pendiente la suco del cielo", "agregar tareas comprar pan y comprar leche")
+  let addTaskContent = '';
+  const addMatch = lower.match(/(?:agregar|agrega|añadir|añade|crear|crea|anotar|anota|nuevo|nueva|pon|poner)\s+(?:pendiente|pendientes|tarea|tareas)?\s*(.+)/i);
+  if (addMatch && addMatch[1]) {
+    addTaskContent = addMatch[1];
+  } else if (!sheetCreateMatch && clean.length > 1) {
+    addTaskContent = clean;
+  }
+
+  if (addTaskContent) {
+    let cleaned = addTaskContent.replace(/^(?:que|para|de|a|en)\s+/i, '').trim();
+    const titles = cleaned
+      .split(/\s+y\s+|\s+e\s+|,\s*/i)
+      .map(t => t.trim())
+      .filter(t => t.length > 0 && !['las', 'los', 'la', 'el', 'tareas', 'pendientes'].includes(t.toLowerCase()));
+
+    if (titles.length > 0) {
+      actions.push({ type: 'add_tasks', titles });
+      const feedback = actions.some(a => a.type === 'create_sheet')
+        ? `${speechFeedback} Y agregué ${titles.length === 1 ? `el pendiente: "${titles[0]}"` : `${titles.length} pendientes`}.`
+        : `¡Listo! Agregué ${titles.length === 1 ? `el pendiente "${titles[0]}"` : `${titles.length} pendientes`}.`;
+      return { actions, speechFeedback: feedback };
+    }
+  }
+
+  // 5. Switch sheet
+  const switchMatch = lower.match(/(?:cambiar|cambia|ir|abrir|abre|pasa|pasar)\s+(?:a|a la|al)?\s*(?:hoja|tablero)?\s*(.+)/i);
+  if (switchMatch && switchMatch[1]) {
+    const target = switchMatch[1].trim();
+    const matchedSheet = sheets.find(s => 
+      s.title && (s.title.toLowerCase().includes(target) || target.includes(s.title.toLowerCase()))
+    );
+    if (matchedSheet) {
+      actions.push({
+        type: 'switch_sheet',
+        sheetId: matchedSheet.id,
+        title: matchedSheet.title
+      });
+      return { actions, speechFeedback: `Cambiando a la hoja "${matchedSheet.title}".` };
+    }
+  }
+
+  if (actions.length === 0) {
+    actions.push({ type: 'add_tasks', titles: [clean] });
+    speechFeedback = `Agregué el pendiente: "${clean}".`;
+  }
+
+  return { actions, speechFeedback };
+}
+
 async function startServer() {
   const app = express();
   const isProd = process.env.NODE_ENV === 'production';
@@ -25,15 +124,21 @@ async function startServer() {
 
   // API endpoint for voice-control action interpretation
   app.post('/api/ai/voice-control', async (req, res) => {
+    const { text, existingSheets, existingColumns } = req.body;
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'El comando de voz no puede estar vacío.' });
+    }
+
+    const sheetsList = Array.isArray(existingSheets) ? existingSheets : [];
+    const columnsList = Array.isArray(existingColumns) ? existingColumns : [];
+
+    // If no API key or in fallback mode, run the instant semantic parser
+    if (!process.env.GEMINI_API_KEY) {
+      const fallbackResult = parseVoiceCommandFallback(text, sheetsList, columnsList);
+      return res.json(fallbackResult);
+    }
+
     try {
-      const { text, existingSheets, existingColumns } = req.body;
-      if (!text || typeof text !== 'string') {
-        return res.status(400).json({ error: 'El comando de voz no puede estar vacío.' });
-      }
-
-      const sheetsList = Array.isArray(existingSheets) ? existingSheets : [];
-      const columnsList = Array.isArray(existingColumns) ? existingColumns : [];
-
       const systemInstruction = `
 You are the advanced AI Voice Control interpreter for TaskPro 3D, a real-time Kanban board system.
 Your job is to read Spanish transcribed text from the microphone and translate it into clear state-action operations.
@@ -50,13 +155,13 @@ Supported Actions:
 5. "toggle_sound": Enabled (boolean) to turn sound effects on or off.
 
 Fuzzy Interpretation Rules for high-fidelity Spanish transcription:
-- Users speak naturally: "Agrega las tareas comprar pan, comprar queso e ir a la tienda." You must parse the list and split it into three items: ["comprar pan", "comprar queso", "ir a la tienda"].
-- Notice connectors: "y", "e", "además de", "también", commas, pauses. Be aggressive and smart in isolating individual task titles so the user can easily say 5 things in one breath and get them all added cleanly!
-- If the user says: "borrar las tareas comprar pan y comprar leche", add action "delete_tasks" with titles: ["comprar pan", "comprar leche"].
-- Matching Sheets: Fuzzily match Spanish board/sheet requests. If they say "cambiar a proyectos" and there's a sheet "Proyectos 🚀", map to switch_sheet with sheetId "sheet_..." of that sheet.
+- Users speak naturally: "Agregar pendiente la suco del cielo" -> action "add_tasks" with titles: ["la suco del cielo"].
+- "Agrega las tareas comprar pan, comprar queso e ir a la tienda" -> action "add_tasks" with titles: ["comprar pan", "comprar queso", "ir a la tienda"].
+- "borrar las tareas comprar pan y comprar leche" -> action "delete_tasks" with titles: ["comprar pan", "comprar leche"].
+- "cambiar a proyectos" -> switch_sheet to matching sheet.
 - Spanish speech connectors: Convert vocal intents like "por favor agrégate...", "ponme...", "borra...", "sácame...", "crea una hoja que se llame..." to the correct clean actions.
 
-Always include a friendly, concise, and smart auditory confirmation feedback in "speechFeedback" in Spanish, e.g. "¡Por supuesto! Creé la hoja de Proyectos y agregué las tareas: comprar café y llamar a Juan."
+Always include a friendly, concise, and smart auditory confirmation feedback in "speechFeedback" in Spanish, e.g. "¡Listo! Agregué el pendiente: la suco del cielo."
 `;
 
       const response = await ai.models.generateContent({
@@ -117,10 +222,17 @@ Always include a friendly, concise, and smart auditory confirmation feedback in 
 
       const responseText = response.text || '{}';
       const parsedData = JSON.parse(responseText.trim());
-      return res.json(parsedData);
+      if (parsedData.actions && parsedData.actions.length > 0) {
+        return res.json(parsedData);
+      }
+
+      // If Gemini returned empty actions, fall back to semantic parser
+      const fallbackResult = parseVoiceCommandFallback(text, sheetsList, columnsList);
+      return res.json(fallbackResult);
     } catch (err: any) {
-      console.error('AI Voice Control error:', err);
-      return res.status(500).json({ error: err.message || 'Error interpretando el comando de voz.' });
+      console.warn('AI Voice Control error, executing semantic fallback:', err);
+      const fallbackResult = parseVoiceCommandFallback(text, sheetsList, columnsList);
+      return res.json(fallbackResult);
     }
   });
 

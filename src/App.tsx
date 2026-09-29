@@ -35,7 +35,12 @@ import {
   Pencil,
   Settings,
   Mic,
-  MicOff
+  MicOff,
+  Palette,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Layers
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from './firebase';
 import { playPop, playWoosh, playSuccess, playFanfare } from './sound';
@@ -45,6 +50,132 @@ interface KanbanColumn {
   id: string;
   title: string;
   color?: string;
+}
+
+// Vibrant color palette constants ensuring columns and cards share cohesive vibrant colors
+export const VIBRANT_COLUMN_PALETTE = [
+  '#6366f1', // Electric Indigo
+  '#f59e0b', // Radiant Amber / Gold
+  '#06b6d4', // Neon Cyan
+  '#10b981', // Vibrant Emerald
+  '#f43f5e', // Hot Coral / Rose
+  '#a855f7', // Electric Purple
+  '#3b82f6', // Vivid Blue
+  '#f97316', // Bright Orange
+];
+
+export const VIBRANT_COLOR_SWATCHES = [
+  { hex: '#6366f1', name: 'Índigo' },
+  { hex: '#f59e0b', name: 'Ámbar' },
+  { hex: '#06b6d4', name: 'Cian' },
+  { hex: '#10b981', name: 'Esmeralda' },
+  { hex: '#f43f5e', name: 'Coral' },
+  { hex: '#a855f7', name: 'Púrpura' },
+  { hex: '#3b82f6', name: 'Azul' },
+  { hex: '#f97316', name: 'Naranja' },
+  { hex: '#84cc16', name: 'Lima' },
+  { hex: '#ec4899', name: 'Fucsia' },
+  { hex: '#e11d48', name: 'Rojo' },
+  { hex: '#71717a', name: 'Gris' }
+];
+
+export const getColumnVibrantColor = (col?: KanbanColumn | null, index = 0): string => {
+  if (col && col.color && col.color.trim()) return col.color;
+  return VIBRANT_COLUMN_PALETTE[index % VIBRANT_COLUMN_PALETTE.length];
+};
+
+// Client-side fallback voice command parser (100% resilient even if offline or server fails)
+function parseVoiceCommandFallbackClient(text: string, sheets: any[], columns: any[]) {
+  const clean = text.trim();
+  const lower = clean.toLowerCase();
+  const actions: any[] = [];
+  let speechFeedback = '';
+
+  if (lower.includes('desactivar sonido') || lower.includes('quitar sonido') || lower.includes('silenciar')) {
+    actions.push({ type: 'toggle_sound', enabled: false });
+    return { actions, speechFeedback: 'Sonidos desactivados.' };
+  }
+  if (lower.includes('activar sonido') || lower.includes('poner sonido') || lower.includes('con sonido')) {
+    actions.push({ type: 'toggle_sound', enabled: true });
+    return { actions, speechFeedback: 'Sonidos activados.' };
+  }
+
+  const sheetCreateMatch = lower.match(/(?:crear|crea|nueva|nuevo)\s+(?:hoja|tablero|pizarra)\s+([a-záéíóúñ0-9\s]+?)(?:\s+y\s+(?:agregar|crear|pon)|\s*$)/i);
+  if (sheetCreateMatch && sheetCreateMatch[1]) {
+    const sheetTitle = sheetCreateMatch[1].trim();
+    if (sheetTitle) {
+      actions.push({
+        type: 'create_sheet',
+        title: sheetTitle.charAt(0).toUpperCase() + sheetTitle.slice(1),
+        emoji: '🎯'
+      });
+      speechFeedback = `Creé la hoja "${sheetTitle}".`;
+    }
+  }
+
+  const deleteMatch = lower.match(/(?:eliminar|borrar|quitar|sacar)\s+(?:tarea|tareas|pendiente|pendientes)?\s*(.+)/i);
+  if (deleteMatch && deleteMatch[1] && !lower.includes('crear hoja')) {
+    const rawItems = deleteMatch[1].trim();
+    const titles = rawItems
+      .split(/\s+y\s+|\s+e\s+|,\s*/i)
+      .map(t => t.replace(/^(?:la|el|las|los|de|mi)\s+/i, '').trim())
+      .filter(t => t.length > 0);
+
+    if (titles.length > 0) {
+      actions.push({ type: 'delete_tasks', titles });
+      return {
+        actions,
+        speechFeedback: `Eliminé ${titles.length === 1 ? `el pendiente "${titles[0]}"` : `${titles.length} pendientes`}.`
+      };
+    }
+  }
+
+  let addTaskContent = '';
+  const addMatch = lower.match(/(?:agregar|agrega|añadir|añade|crear|crea|anotar|anota|nuevo|nueva|pon|poner)\s+(?:pendiente|pendientes|tarea|tareas)?\s*(.+)/i);
+  if (addMatch && addMatch[1]) {
+    addTaskContent = addMatch[1];
+  } else if (!sheetCreateMatch && clean.length > 1) {
+    addTaskContent = clean;
+  }
+
+  if (addTaskContent) {
+    let cleaned = addTaskContent.replace(/^(?:que|para|de|a|en)\s+/i, '').trim();
+    const titles = cleaned
+      .split(/\s+y\s+|\s+e\s+|,\s*/i)
+      .map(t => t.trim())
+      .filter(t => t.length > 0 && !['las', 'los', 'la', 'el', 'tareas', 'pendientes'].includes(t.toLowerCase()));
+
+    if (titles.length > 0) {
+      actions.push({ type: 'add_tasks', titles });
+      const feedback = actions.some(a => a.type === 'create_sheet')
+        ? `${speechFeedback} Y agregué ${titles.length === 1 ? `el pendiente: "${titles[0]}"` : `${titles.length} pendientes`}.`
+        : `¡Listo! Agregué ${titles.length === 1 ? `el pendiente "${titles[0]}"` : `${titles.length} pendientes`}.`;
+      return { actions, speechFeedback: feedback };
+    }
+  }
+
+  const switchMatch = lower.match(/(?:cambiar|cambia|ir|abrir|abre|pasa|pasar)\s+(?:a|a la|al)?\s*(?:hoja|tablero)?\s*(.+)/i);
+  if (switchMatch && switchMatch[1]) {
+    const target = switchMatch[1].trim();
+    const matchedSheet = sheets.find(s => 
+      s.title && (s.title.toLowerCase().includes(target) || target.includes(s.title.toLowerCase()))
+    );
+    if (matchedSheet) {
+      actions.push({
+        type: 'switch_sheet',
+        sheetId: matchedSheet.id,
+        title: matchedSheet.title
+      });
+      return { actions, speechFeedback: `Cambiando a la hoja "${matchedSheet.title}".` };
+    }
+  }
+
+  if (actions.length === 0) {
+    actions.push({ type: 'add_tasks', titles: [clean] });
+    speechFeedback = `Agregué el pendiente: "${clean}".`;
+  }
+
+  return { actions, speechFeedback };
 }
 
 // Board Sheet Interface
@@ -132,6 +263,8 @@ export default function App() {
   const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
   const [editColumnTitle, setEditColumnTitle] = useState('');
   const [editColumnColor, setEditColumnColor] = useState<string>('');
+  const [activeColorPickerColId, setActiveColorPickerColId] = useState<string | null>(null);
+  const [showMobileSheetsDrawer, setShowMobileSheetsDrawer] = useState(false);
   const [showCompletedSheetsSection, setShowCompletedSheetsSection] = useState(false);
   const [deletingColumnId, setDeletingColumnId] = useState<string | null>(null);
   const [deletingSheetId, setDeletingSheetId] = useState<string | null>(null);
@@ -214,6 +347,16 @@ export default function App() {
         e.preventDefault();
         if (soundEnabled) playPop();
         setShowAddTask(true);
+      }
+
+      // Shortcut [Shift + V] for quick voice assistant activation
+      if (e.shiftKey && (e.key === 'V' || e.key === 'v') && !isTyping) {
+        e.preventDefault();
+        if (soundEnabled) playPop();
+        setIsVoiceAssistantOpen(true);
+        setTimeout(() => {
+          handleStartVoiceRecognition();
+        }, 150);
       }
     };
 
@@ -742,36 +885,47 @@ export default function App() {
     setIsVoiceProcessing(true);
     setVoiceError('');
     try {
-      const response = await fetch('/api/ai/voice-control', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: command,
-          existingSheets: sheets,
-          existingColumns: activeColumns
-        })
-      });
+      let result: any = null;
+      try {
+        const response = await fetch('/api/ai/voice-control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: command,
+            existingSheets: sheets,
+            existingColumns: activeColumns
+          })
+        });
 
-      if (!response.ok) {
-        throw new Error('No se pudo procesar la instrucción por voz.');
+        if (response.ok) {
+          result = await response.json();
+        }
+      } catch (networkErr) {
+        console.warn("Backend voice endpoint unreachable, running instant client semantic parser:", networkErr);
       }
 
-      const result = await response.json();
+      // If backend didn't return actions, execute local Spanish semantic parser fallback
+      if (!result || !result.actions || result.actions.length === 0) {
+        result = parseVoiceCommandFallbackClient(command, sheets, activeColumns);
+      }
+
       if (result.actions && result.actions.length > 0) {
         await executeVoiceActions(result.actions, result.speechFeedback);
         setVoiceSuccessMessage(result.speechFeedback);
       } else {
-        setVoiceSuccessMessage(result.speechFeedback || 'Comando entendido, pero no se generaron acciones.');
+        setVoiceSuccessMessage(result.speechFeedback || 'Comando entendido.');
         if ('speechSynthesis' in window) {
           window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance(result.speechFeedback || 'No entendí esa instrucción.');
+          const utterance = new SpeechSynthesisUtterance(result.speechFeedback || 'Comando procesado.');
           utterance.lang = 'es-ES';
           window.speechSynthesis.speak(utterance);
         }
       }
     } catch (err: any) {
-      console.error(err);
-      setVoiceError(err.message || 'Error al procesar el comando de voz.');
+      console.warn("Voice processing error, executing fallback:", err);
+      const fallbackResult = parseVoiceCommandFallbackClient(command, sheets, activeColumns);
+      await executeVoiceActions(fallbackResult.actions, fallbackResult.speechFeedback);
+      setVoiceSuccessMessage(fallbackResult.speechFeedback);
     } finally {
       setIsVoiceProcessing(false);
     }
@@ -1096,6 +1250,39 @@ export default function App() {
     }
   };
 
+  // Quick 1-click column color updater
+  const handleQuickSetColumnColor = async (colId: string, colorHex: string) => {
+    if (soundEnabled) playPop();
+    const updatedColumns = activeColumns.map(c => {
+      if (c.id === colId) {
+        return { ...c, color: colorHex };
+      }
+      return c;
+    });
+
+    const updatedSheets = sheets.map(s => {
+      if (s.id === activeSheetId) {
+        return { ...s, columns: updatedColumns };
+      }
+      return s;
+    });
+
+    setSheets(updatedSheets);
+    localStorage.setItem('sincrotask_sheets_list', JSON.stringify(updatedSheets));
+    setActiveColorPickerColId(null);
+
+    if (isOfflineFallback) return;
+
+    try {
+      await updateDoc(doc(db, 'boards', activeSheetId), {
+        columns: updatedColumns
+      });
+    } catch (err) {
+      console.warn("Failed to set column color:", err);
+      handleFirestoreError(err, OperationType.UPDATE, `boards/${activeSheetId}`);
+    }
+  };
+
   // Delete a Column (moves tasks from this column to the remaining first column)
   const handleDeleteColumn = async (colIdToDelete: string) => {
     if (soundEnabled) playPop();
@@ -1201,11 +1388,12 @@ export default function App() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => { if (soundEnabled) playPop(); setIsVoiceAssistantOpen(true); }}
-              className="p-2 px-3 rounded-xl bg-indigo-600/15 border border-indigo-500/35 text-indigo-400 hover:text-white transition-all cursor-pointer flex items-center gap-1.5 shadow-[0_0_12px_rgba(99,102,241,0.15)] hover:border-indigo-400"
-              title="Asistente de Voz IA"
+              className="hidden md:flex p-2 px-3 rounded-xl bg-indigo-600/15 border border-indigo-500/35 text-indigo-400 hover:text-white transition-all cursor-pointer items-center gap-1.5 shadow-[0_0_12px_rgba(99,102,241,0.15)] hover:border-indigo-400"
+              title="Asistente de Voz IA (Shift + V)"
             >
               <Mic className="w-4 h-4 animate-pulse text-indigo-400" />
-              <span className="text-[10px] font-extrabold tracking-wider uppercase hidden sm:inline">Voz IA</span>
+              <span className="text-[10px] font-extrabold tracking-wider uppercase">Voz IA</span>
+              <kbd className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-950/80 border border-indigo-500/30 text-indigo-300 font-mono font-bold">⇧V</kbd>
             </button>
             <button 
               onClick={() => { setSoundEnabled(!soundEnabled); if (!soundEnabled) setTimeout(playPop, 50); }}
@@ -1305,8 +1493,102 @@ export default function App() {
           </div>
         </div>
 
-        {/* MULTI-SHEET / BOARD TABS SELECTOR BAR - Dynamic swipable dark list */}
-        <div className="border-b border-slate-800 flex items-center justify-between gap-3">
+        {/* MOBILE DEDICATED SHEET SELECTOR BAR (Optimized for Mobile) */}
+        <div className="md:hidden flex flex-col gap-2 p-2.5 bg-zinc-900/90 border border-zinc-800 rounded-2xl shadow-lg backdrop-blur-md">
+          <div className="flex items-center justify-between gap-2">
+            {/* Prev Sheet Button */}
+            <button
+              onClick={() => {
+                if (soundEnabled) playWoosh();
+                const curIdx = sheets.findIndex(s => s.id === activeSheetId);
+                if (curIdx > 0) setActiveSheetId(sheets[curIdx - 1].id);
+              }}
+              disabled={sheets.findIndex(s => s.id === activeSheetId) <= 0}
+              className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-300 disabled:opacity-25 disabled:cursor-not-allowed active:scale-95 transition-all cursor-pointer"
+              title="Hoja anterior"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            {/* Current Active Sheet Selector / Drawer Trigger */}
+            <button
+              onClick={() => {
+                if (soundEnabled) playPop();
+                setShowMobileSheetsDrawer(true);
+              }}
+              className="flex-1 flex items-center justify-between px-3 py-2 rounded-xl bg-zinc-950 border border-indigo-500/30 text-white font-extrabold text-xs shadow-inner active:scale-[0.98] transition-all cursor-pointer"
+            >
+              <div className="flex items-center gap-2 truncate">
+                <span className="text-base">{activeSheet?.emoji || '🎯'}</span>
+                <span className="truncate max-w-[130px] text-zinc-100">{activeSheet?.title || 'Mi Tablero'}</span>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0 text-indigo-400">
+                <span className="text-[10px] font-mono font-bold bg-indigo-950/80 px-2 py-0.5 rounded-full border border-indigo-500/30">
+                  {tasks.length}
+                </span>
+                <ChevronDown className="w-4 h-4 text-indigo-400" />
+              </div>
+            </button>
+
+            {/* Next Sheet Button */}
+            <button
+              onClick={() => {
+                if (soundEnabled) playWoosh();
+                const curIdx = sheets.findIndex(s => s.id === activeSheetId);
+                if (curIdx < sheets.length - 1) setActiveSheetId(sheets[curIdx + 1].id);
+              }}
+              disabled={sheets.findIndex(s => s.id === activeSheetId) >= sheets.length - 1}
+              className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-300 disabled:opacity-25 disabled:cursor-not-allowed active:scale-95 transition-all cursor-pointer"
+              title="Hoja siguiente"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            {/* New Sheet Quick Trigger */}
+            <button
+              onClick={() => {
+                if (soundEnabled) playPop();
+                setShowAddSheetInput(true);
+              }}
+              className="p-2.5 rounded-xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 active:scale-95 transition-all cursor-pointer hover:bg-indigo-600 hover:text-white"
+              title="Nueva Hoja"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Quick inline board adder on mobile when clicked */}
+          {showAddSheetInput && (
+            <form onSubmit={handleAddSheet} className="flex items-center gap-1.5 p-1.5 bg-[#0c0c0e] border border-zinc-800 rounded-xl animate-scale-up shadow-2xl z-20">
+              <input 
+                type="text" 
+                value={newSheetTitle}
+                onChange={(e) => setNewSheetTitle(e.target.value)}
+                placeholder="Nombre de nueva hoja..."
+                maxLength={20}
+                className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-indigo-500 text-white placeholder:text-zinc-600 flex-1"
+                autoFocus
+                required
+              />
+              <button 
+                type="submit"
+                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold cursor-pointer"
+              >
+                Crear
+              </button>
+              <button 
+                type="button" 
+                onClick={() => setShowAddSheetInput(false)}
+                className="p-1 text-zinc-500 hover:text-zinc-350 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </form>
+          )}
+        </div>
+
+        {/* MULTI-SHEET / BOARD TABS SELECTOR BAR - Desktop Layout */}
+        <div className="hidden md:flex border-b border-slate-800 items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-2.5 flex-1 -mb-px sheet-tabs-scrollbar">
             {sheets.filter(sheet => {
               const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
@@ -1450,23 +1732,25 @@ export default function App() {
               <div className="flex flex-col md:flex-row md:items-start gap-5 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-800">
                 {activeColumns.map((col, idx) => {
                   const colTasks = tasks.filter(t => t.column === col.id);
+                  const columnVibrantColor = getColumnVibrantColor(col, idx);
 
                   return (
                     <div 
                       key={col.id} 
                       style={{ 
-                        backgroundColor: col.color ? `${col.color}0a` : undefined, 
-                        borderColor: col.color ? `${col.color}25` : undefined 
+                        backgroundColor: `${columnVibrantColor}18`, 
+                        borderColor: `${columnVibrantColor}60`,
+                        boxShadow: `0 20px 45px rgba(0,0,0,0.65), inset 0 0 35px ${columnVibrantColor}0c`
                       }}
-                      className={`column-3d-container rounded-2xl bg-zinc-900/45 border border-zinc-800/80 p-4 flex flex-col gap-3.5 w-full md:w-80 md:shrink-0 max-h-[650px] overflow-y-auto shadow-[0_20px_45px_rgba(0,0,0,0.85)] ${idx % 2 === 0 ? 'animate-float-3d-odd' : 'animate-float-3d-even'}`}
+                      className={`column-3d-container rounded-2xl border p-4 flex flex-col gap-3.5 w-full md:w-80 md:shrink-0 max-h-[650px] overflow-y-auto ${idx % 2 === 0 ? 'animate-float-3d-odd' : 'animate-float-3d-even'}`}
                     >
-                      {/* Column Header (With editable name and deletion options!) */}
-                      <div className="flex items-center justify-between border-b border-zinc-850 pb-2.5">
+                      {/* Column Header (With editable name, instant palette, and deletion options!) */}
+                      <div className="flex items-center justify-between border-b border-zinc-850/80 pb-2.5">
                         
                         {editingColumnId === col.id ? (
                           <form 
                             onSubmit={handleEditColumn}
-                            className="flex flex-col gap-2 p-2 bg-zinc-950/80 border border-zinc-800 rounded-xl flex-1 animate-scale-up"
+                            className="flex flex-col gap-2 p-2 bg-zinc-950/90 border border-zinc-800 rounded-xl flex-1 animate-scale-up"
                           >
                             <div className="flex items-center gap-1.5 w-full">
                               <input 
@@ -1483,30 +1767,18 @@ export default function App() {
 
                             {/* Spectrum Color Selection Row */}
                             <div className="flex flex-col gap-1">
-                              <span className="text-[8px] font-mono font-bold text-zinc-500 uppercase tracking-widest text-left">Fondo de Columna:</span>
+                              <span className="text-[8px] font-mono font-bold text-zinc-500 uppercase tracking-widest text-left">Color de Columna:</span>
                               <div className="flex flex-wrap gap-1.5">
-                                {[
-                                  { hex: '', name: 'Ninguno' },
-                                  { hex: '#ef4444', name: 'Rojo' },
-                                  { hex: '#f97316', name: 'Naranja' },
-                                  { hex: '#f59e0b', name: 'Ámbar' },
-                                  { hex: '#10b981', name: 'Esmeralda' },
-                                  { hex: '#06b6d4', name: 'Cian' },
-                                  { hex: '#3b82f6', name: 'Azul' },
-                                  { hex: '#6366f1', name: 'Indigo' },
-                                  { hex: '#a855f7', name: 'Púrpura' },
-                                  { hex: '#ec4899', name: 'Rosa' },
-                                  { hex: '#71717a', name: 'Gris' }
-                                ].map((colorOption) => (
+                                {VIBRANT_COLOR_SWATCHES.map((swatch) => (
                                   <button
-                                    key={colorOption.name}
+                                    key={swatch.name}
                                     type="button"
-                                    onClick={() => setEditColumnColor(colorOption.hex)}
-                                    title={colorOption.name}
-                                    style={{ backgroundColor: colorOption.hex || '#18181b' }}
-                                    className={`w-3.5 h-3.5 rounded-full border cursor-pointer transition-all ${
-                                      editColumnColor === colorOption.hex 
-                                        ? 'border-white scale-125 shadow-[0_0_8px_rgba(255,255,255,0.4)]' 
+                                    onClick={() => setEditColumnColor(swatch.hex)}
+                                    title={swatch.name}
+                                    style={{ backgroundColor: swatch.hex }}
+                                    className={`w-4 h-4 rounded-full border cursor-pointer transition-all ${
+                                      (editColumnColor || columnVibrantColor) === swatch.hex 
+                                        ? 'border-white scale-125 shadow-[0_0_8px_rgba(255,255,255,0.6)]' 
                                         : 'border-zinc-800 hover:border-zinc-500 hover:scale-110'
                                     }`}
                                   />
@@ -1515,12 +1787,12 @@ export default function App() {
                             </div>
                           </form>
                         ) : (
-                          <div className="flex items-center gap-2 group/col">
+                          <div className="flex items-center gap-2 group/col relative">
                             <span 
-                              className="w-2.5 h-2.5 rounded-full shrink-0" 
-                              style={{ backgroundColor: col.color || '#6366f1' }}
+                              className="w-3 h-3 rounded-full shrink-0 shadow-sm" 
+                              style={{ backgroundColor: columnVibrantColor }}
                             />
-                            <h3 className="font-extrabold text-sm text-zinc-200">{col.title}</h3>
+                            <h3 className="font-extrabold text-sm text-white tracking-tight">{col.title}</h3>
                             
                             {/* Rename column pencil */}
                             <button
@@ -1528,18 +1800,80 @@ export default function App() {
                                 if (soundEnabled) playPop();
                                 setEditingColumnId(col.id);
                                 setEditColumnTitle(col.title);
-                                setEditColumnColor(col.color || '');
+                                setEditColumnColor(col.color || columnVibrantColor);
                               }}
-                              className="p-0.5 rounded hover:bg-zinc-800 text-zinc-500 hover:text-indigo-400 transition-colors opacity-0 group-hover/col:opacity-100 cursor-pointer"
-                              title="Configurar columna"
+                              className="p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-white transition-colors opacity-60 group-hover/col:opacity-100 cursor-pointer"
+                              title="Renombrar columna"
                             >
-                              <Pencil className="w-2.5 h-2.5" />
+                              <Pencil className="w-3 h-3" />
                             </button>
+
+                            {/* Instant Color Palette Popover Trigger */}
+                            <div className="relative">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (soundEnabled) playPop();
+                                  setActiveColorPickerColId(activeColorPickerColId === col.id ? null : col.id);
+                                }}
+                                className="p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-white transition-colors cursor-pointer flex items-center justify-center opacity-70 group-hover/col:opacity-100"
+                                title="Cambiar color de columna instantáneamente"
+                              >
+                                <Palette className="w-3.5 h-3.5" style={{ color: columnVibrantColor }} />
+                              </button>
+
+                              {/* Instant Dropdown Popover */}
+                              {activeColorPickerColId === col.id && (
+                                <div 
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="absolute top-8 left-0 z-40 p-3 bg-zinc-950 border border-zinc-700/80 rounded-2xl shadow-2xl backdrop-blur-xl w-56 animate-scale-up"
+                                >
+                                  <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-zinc-850">
+                                    <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-wider">
+                                      Color Vibrante
+                                    </span>
+                                    <button 
+                                      onClick={() => setActiveColorPickerColId(null)}
+                                      className="text-zinc-500 hover:text-white p-0.5 cursor-pointer"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+
+                                  <div className="grid grid-cols-4 gap-2">
+                                    {VIBRANT_COLOR_SWATCHES.map((swatch) => (
+                                      <button
+                                        key={swatch.hex}
+                                        type="button"
+                                        onClick={() => handleQuickSetColumnColor(col.id, swatch.hex)}
+                                        title={swatch.name}
+                                        style={{ backgroundColor: swatch.hex }}
+                                        className={`w-9 h-9 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-center hover:scale-110 active:scale-95 ${
+                                          columnVibrantColor.toLowerCase() === swatch.hex.toLowerCase() 
+                                            ? 'border-white scale-105 shadow-[0_0_12px_rgba(255,255,255,0.5)]' 
+                                            : 'border-white/20 hover:border-white/60'
+                                        }`}
+                                      >
+                                        {columnVibrantColor.toLowerCase() === swatch.hex.toLowerCase() && (
+                                          <Check className="w-4 h-4 text-white drop-shadow-md stroke-[3]" />
+                                        )}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
 
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs font-mono font-bold bg-zinc-800 px-2 py-0.5 rounded-md text-zinc-400">
+                          <span 
+                            className="text-xs font-mono font-black px-2 py-0.5 rounded-md text-white border"
+                            style={{ 
+                              backgroundColor: `${columnVibrantColor}35`, 
+                              borderColor: `${columnVibrantColor}70` 
+                            }}
+                          >
                             {colTasks.length}
                           </span>
 
@@ -2068,6 +2402,119 @@ export default function App() {
         </div>
       )}
 
+      {/* MODAL: Mobile Sheets Drawer / Selector */}
+      {showMobileSheetsDrawer && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md p-0 sm:p-4 animate-fade-in">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-t-3xl sm:rounded-2xl w-full max-w-md max-h-[85vh] p-5 relative shadow-2xl animate-scale-up text-white flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-indigo-600/20 text-indigo-400 rounded-xl">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">Mis Hojas</h3>
+                  <p className="text-[10px] text-zinc-400">Selecciona o administra tus tableros</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => { if (soundEnabled) playPop(); setShowMobileSheetsDrawer(false); }}
+                className="p-1 text-zinc-400 hover:text-white rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* List of sheets */}
+            <div className="flex flex-col gap-2.5 overflow-y-auto max-h-[50vh] pr-1">
+              {sheets.map((sheet) => {
+                const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
+                const isCompleted = stats.total > 0 && stats.pending === 0 && stats.progress === 0;
+                const isActive = activeSheetId === sheet.id;
+
+                return (
+                  <div
+                    key={sheet.id}
+                    onClick={() => {
+                      if (soundEnabled) playPop();
+                      setActiveSheetId(sheet.id);
+                      setShowMobileSheetsDrawer(false);
+                    }}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                      isActive 
+                        ? 'bg-indigo-600/20 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.2)]' 
+                        : 'bg-zinc-950/70 border-zinc-800 hover:border-zinc-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 truncate">
+                      <span className="text-2xl">{sheet.emoji || '🎯'}</span>
+                      <div className="truncate">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-bold truncate ${isActive ? 'text-white' : 'text-zinc-200'}`}>
+                            {sheet.title}
+                          </span>
+                          {isCompleted && (
+                            <span className="text-[9px] font-bold text-amber-400 bg-amber-950/60 border border-amber-500/30 px-1.5 py-0.5 rounded">
+                              Completada 🏆
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-zinc-400 font-mono">
+                          {stats.total} {stats.total === 1 ? 'tarea' : 'tareas'} · {stats.completed} listas
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => {
+                          if (soundEnabled) playPop();
+                          setEditingSheet(sheet);
+                          setEditSheetTitle(sheet.title);
+                          setEditSheetEmoji(sheet.emoji);
+                          setShowMobileSheetsDrawer(false);
+                        }}
+                        className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white"
+                        title="Editar hoja"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      {sheets.length > 1 && (
+                        <button
+                          onClick={() => {
+                            if (soundEnabled) playPop();
+                            handleDeleteSheet(sheet.id);
+                          }}
+                          className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-rose-400"
+                          title="Eliminar hoja"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Quick add sheet inside drawer */}
+            <div className="pt-2 border-t border-zinc-800">
+              <button
+                onClick={() => {
+                  if (soundEnabled) playPop();
+                  setShowMobileSheetsDrawer(false);
+                  setShowAddSheetInput(true);
+                }}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-indigo-600/20"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Crear Nueva Hoja</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL: Edit Task Details */}
       {editingTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
@@ -2285,6 +2732,7 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit }: TaskCardPro
   };
 
   const parentColumn = activeColumns[currentIndex];
+  const cardVibrantColor = getColumnVibrantColor(parentColumn, currentIndex);
 
   return (
     <div 
@@ -2299,33 +2747,31 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit }: TaskCardPro
         transform: `translateX(${dragOffset}px) rotate(${dragOffset * 0.04}deg)`,
         transition: isDraggingCard.current ? 'none' : 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
         cursor: isDraggingCard.current ? 'grabbing' : 'grab',
-        borderColor: parentColumn?.color ? `${parentColumn.color}50` : undefined,
-        backgroundColor: parentColumn?.color ? `${parentColumn.color}18` : '#27272a',
-        boxShadow: parentColumn?.color 
-          ? `0 10px 25px -10px ${parentColumn.color}50, inset 0 0 10px ${parentColumn.color}15` 
-          : '0 10px 25px rgba(0,0,0,0.3)'
+        borderColor: `${cardVibrantColor}75`,
+        backgroundColor: `${cardVibrantColor}28`,
+        boxShadow: `0 10px 25px -6px ${cardVibrantColor}55, inset 0 0 16px ${cardVibrantColor}18`
       }}
-      className={`task-card-3d p-3.5 rounded-xl border border-zinc-700/80 hover:border-indigo-500/50 shadow-md hover:-translate-y-1 transform group flex flex-col gap-2.5 relative overflow-hidden select-none touch-none ${task.column === lastColId ? 'opacity-40 bg-zinc-950/40' : ''}`}
+      className="task-card-3d p-3.5 rounded-xl border hover:border-white/80 shadow-md hover:-translate-y-1 transform group flex flex-col gap-2.5 relative overflow-hidden select-none touch-none"
     >
       
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1 text-[9px] text-slate-500 uppercase font-semibold font-mono tracking-wider">
-          <CircleDot className="w-3 h-3 text-indigo-400" />
+        <div className="flex items-center gap-1.5 text-[9px] uppercase font-bold font-mono tracking-wider" style={{ color: cardVibrantColor }}>
+          <CircleDot className="w-3.5 h-3.5" style={{ color: cardVibrantColor }} />
           <span>Pendiente</span>
         </div>
         {task.column === lastColId && (
-          <span className="text-[9px] font-mono font-bold text-amber-300 bg-amber-950/40 px-1.5 py-0.5 rounded">
+          <span className="text-[9px] font-mono font-bold text-amber-300 bg-amber-950/60 border border-amber-500/30 px-1.5 py-0.5 rounded">
             +1 XP
           </span>
         )}
       </div>
 
       <div>
-        <h4 className="font-bold text-xs sm:text-sm text-slate-100 group-hover:text-white transition-colors leading-snug line-clamp-2">
+        <h4 className="font-extrabold text-xs sm:text-sm text-white transition-colors leading-snug line-clamp-2">
           {task.title}
         </h4>
         {task.description && (
-          <p className="text-[11px] text-slate-450 leading-relaxed mt-0.5 line-clamp-2">
+          <p className="text-[11px] text-zinc-200/90 leading-relaxed mt-0.5 line-clamp-2">
             {task.description}
           </p>
         )}
