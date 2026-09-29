@@ -44,6 +44,7 @@ import { playPop, playWoosh, playSuccess, playFanfare } from './sound';
 interface KanbanColumn {
   id: string;
   title: string;
+  color?: string;
 }
 
 // Board Sheet Interface
@@ -130,6 +131,8 @@ export default function App() {
   const [newColumnTitle, setNewColumnTitle] = useState('');
   const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
   const [editColumnTitle, setEditColumnTitle] = useState('');
+  const [editColumnColor, setEditColumnColor] = useState<string>('');
+  const [showCompletedSheetsSection, setShowCompletedSheetsSection] = useState(false);
   const [deletingColumnId, setDeletingColumnId] = useState<string | null>(null);
   const [deletingSheetId, setDeletingSheetId] = useState<string | null>(null);
 
@@ -699,7 +702,15 @@ export default function App() {
 
     recognition.onerror = (e: any) => {
       console.error("Speech Recognition Error:", e);
-      setVoiceError('Error de captura de voz. Inténtalo de nuevo.');
+      if (e.error === 'no-speech') {
+        setVoiceError('No se detectó voz. Hable de nuevo cuando esté listo.');
+      } else if (e.error === 'not-allowed') {
+        setVoiceError('Acceso al micrófono denegado. Concede permisos de audio en tu navegador o iframe.');
+      } else if (e.error === 'audio-capture') {
+        setVoiceError('No se encontró ningún micrófono conectado en este dispositivo.');
+      } else {
+        setVoiceError(`Error de voz (${e.error || 'desconocido'}). Inténtalo de nuevo.`);
+      }
       setIsListening(false);
     };
 
@@ -1046,7 +1057,7 @@ export default function App() {
     }
   };
 
-  // Rename a Column
+  // Rename and Recolor a Column
   const handleEditColumn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingColumnId || !editColumnTitle.trim()) return;
@@ -1055,7 +1066,7 @@ export default function App() {
 
     const updatedColumns = activeColumns.map(c => {
       if (c.id === editingColumnId) {
-        return { ...c, title: editColumnTitle.trim() };
+        return { ...c, title: editColumnTitle.trim(), color: editColumnColor };
       }
       return c;
     });
@@ -1071,6 +1082,7 @@ export default function App() {
     localStorage.setItem('sincrotask_sheets_list', JSON.stringify(updatedSheets));
     setEditingColumnId(null);
     setEditColumnTitle('');
+    setEditColumnColor('');
 
     if (isOfflineFallback) return;
 
@@ -1079,7 +1091,7 @@ export default function App() {
         columns: updatedColumns
       });
     } catch (err) {
-      console.warn("Failed to rename column online:", err);
+      console.warn("Failed to update column online:", err);
       handleFirestoreError(err, OperationType.UPDATE, `boards/${activeSheetId}`);
     }
   };
@@ -1296,7 +1308,10 @@ export default function App() {
         {/* MULTI-SHEET / BOARD TABS SELECTOR BAR - Dynamic swipable dark list */}
         <div className="border-b border-slate-800 flex items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-2.5 flex-1 -mb-px sheet-tabs-scrollbar">
-            {sheets.map((sheet, idx) => {
+            {sheets.filter(sheet => {
+              const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
+              return !(stats.total > 0 && stats.pending === 0 && stats.progress === 0);
+            }).map((sheet, idx) => {
               const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
               const isCompleted = stats.total > 0 && stats.pending === 0 && stats.progress === 0;
               const isActive = activeSheetId === sheet.id;
@@ -1364,6 +1379,62 @@ export default function App() {
           </div>
         </div>
 
+        {/* Collapsible Completed Sheets Section */}
+        {(() => {
+          const completedSheetsList = sheets.filter(sheet => {
+            const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
+            return stats.total > 0 && stats.pending === 0 && stats.progress === 0;
+          });
+
+          if (completedSheetsList.length === 0) return null;
+
+          return (
+            <div className="flex flex-col gap-2 bg-amber-500/5 border border-amber-500/10 p-3 rounded-2xl">
+              <button
+                onClick={() => { if (soundEnabled) playPop(); setShowCompletedSheetsSection(!showCompletedSheetsSection); }}
+                className="px-3.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 hover:border-amber-500/30 rounded-xl text-xs font-black text-amber-300 transition-all cursor-pointer flex items-center gap-2 self-start shadow-sm"
+              >
+                <Award className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                <span>Hojas Completadas ({completedSheetsList.length})</span>
+                <span className="text-[10px] text-amber-500 font-black">
+                  {showCompletedSheetsSection ? '▲ Ocultar' : '▼ Mostrar'}
+                </span>
+              </button>
+
+              {showCompletedSheetsSection && (
+                <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1.5 animate-scale-up">
+                  {completedSheetsList.map((sheet, idx) => {
+                    const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
+                    const isCompleted = stats.total > 0 && stats.pending === 0 && stats.progress === 0;
+                    const isActive = activeSheetId === sheet.id;
+
+                    return (
+                      <SheetTab
+                        key={sheet.id}
+                        sheet={sheet}
+                        idx={idx}
+                        sheetsCount={sheets.length}
+                        isActive={isActive}
+                        isCompleted={isCompleted}
+                        onSelect={() => setActiveSheetId(sheet.id)}
+                        onMove={handleMoveSheet}
+                        onEdit={() => {
+                          setEditingSheet(sheet);
+                          setEditSheetTitle(sheet.title);
+                          setEditSheetEmoji(sheet.emoji);
+                        }}
+                        deletingSheetId={deletingSheetId}
+                        setDeletingSheetId={setDeletingSheetId}
+                        handleDeleteSheet={handleDeleteSheet}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* LOADING SHIM */}
         {loading ? (
           <div className="flex-1 flex flex-col items-center justify-center py-20 bg-slate-900/10 border border-slate-800 rounded-2xl">
@@ -1383,6 +1454,10 @@ export default function App() {
                   return (
                     <div 
                       key={col.id} 
+                      style={{ 
+                        backgroundColor: col.color ? `${col.color}0a` : undefined, 
+                        borderColor: col.color ? `${col.color}25` : undefined 
+                      }}
                       className={`column-3d-container rounded-2xl bg-zinc-900/45 border border-zinc-800/80 p-4 flex flex-col gap-3.5 w-full md:w-80 md:shrink-0 max-h-[650px] overflow-y-auto shadow-[0_20px_45px_rgba(0,0,0,0.85)] ${idx % 2 === 0 ? 'animate-float-3d-odd' : 'animate-float-3d-even'}`}
                     >
                       {/* Column Header (With editable name and deletion options!) */}
@@ -1391,22 +1466,60 @@ export default function App() {
                         {editingColumnId === col.id ? (
                           <form 
                             onSubmit={handleEditColumn}
-                            className="flex items-center gap-1.5 flex-1"
+                            className="flex flex-col gap-2 p-2 bg-zinc-950/80 border border-zinc-800 rounded-xl flex-1 animate-scale-up"
                           >
-                            <input 
-                              type="text"
-                              value={editColumnTitle}
-                              onChange={(e) => setEditColumnTitle(e.target.value)}
-                              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-0.5 text-xs text-white focus:outline-none focus:border-indigo-500"
-                              autoFocus
-                              required
-                            />
-                            <button type="submit" className="text-emerald-400 text-xs font-bold px-1">Ok</button>
-                            <button type="button" onClick={() => setEditingColumnId(null)} className="text-zinc-400 text-xs">x</button>
+                            <div className="flex items-center gap-1.5 w-full">
+                              <input 
+                                type="text"
+                                value={editColumnTitle}
+                                onChange={(e) => setEditColumnTitle(e.target.value)}
+                                className="bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 w-full"
+                                autoFocus
+                                required
+                              />
+                              <button type="submit" className="text-emerald-450 hover:text-emerald-400 text-xs font-black px-1.5 cursor-pointer">OK</button>
+                              <button type="button" onClick={() => setEditingColumnId(null)} className="text-zinc-500 hover:text-white text-xs cursor-pointer">X</button>
+                            </div>
+
+                            {/* Spectrum Color Selection Row */}
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[8px] font-mono font-bold text-zinc-500 uppercase tracking-widest text-left">Fondo de Columna:</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {[
+                                  { hex: '', name: 'Ninguno' },
+                                  { hex: '#ef4444', name: 'Rojo' },
+                                  { hex: '#f97316', name: 'Naranja' },
+                                  { hex: '#f59e0b', name: 'Ámbar' },
+                                  { hex: '#10b981', name: 'Esmeralda' },
+                                  { hex: '#06b6d4', name: 'Cian' },
+                                  { hex: '#3b82f6', name: 'Azul' },
+                                  { hex: '#6366f1', name: 'Indigo' },
+                                  { hex: '#a855f7', name: 'Púrpura' },
+                                  { hex: '#ec4899', name: 'Rosa' },
+                                  { hex: '#71717a', name: 'Gris' }
+                                ].map((colorOption) => (
+                                  <button
+                                    key={colorOption.name}
+                                    type="button"
+                                    onClick={() => setEditColumnColor(colorOption.hex)}
+                                    title={colorOption.name}
+                                    style={{ backgroundColor: colorOption.hex || '#18181b' }}
+                                    className={`w-3.5 h-3.5 rounded-full border cursor-pointer transition-all ${
+                                      editColumnColor === colorOption.hex 
+                                        ? 'border-white scale-125 shadow-[0_0_8px_rgba(255,255,255,0.4)]' 
+                                        : 'border-zinc-800 hover:border-zinc-500 hover:scale-110'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            </div>
                           </form>
                         ) : (
                           <div className="flex items-center gap-2 group/col">
-                            <span className="w-2.5 h-2.5 rounded-full bg-indigo-500/70" />
+                            <span 
+                              className="w-2.5 h-2.5 rounded-full shrink-0" 
+                              style={{ backgroundColor: col.color || '#6366f1' }}
+                            />
                             <h3 className="font-extrabold text-sm text-zinc-200">{col.title}</h3>
                             
                             {/* Rename column pencil */}
@@ -1415,9 +1528,10 @@ export default function App() {
                                 if (soundEnabled) playPop();
                                 setEditingColumnId(col.id);
                                 setEditColumnTitle(col.title);
+                                setEditColumnColor(col.color || '');
                               }}
-                              className="p-0.5 rounded hover:bg-zinc-800 text-zinc-500 hover:text-indigo-400 transition-colors opacity-0 group-hover/col:opacity-100"
-                              title="Renombrar columna"
+                              className="p-0.5 rounded hover:bg-zinc-800 text-zinc-500 hover:text-indigo-400 transition-colors opacity-0 group-hover/col:opacity-100 cursor-pointer"
+                              title="Configurar columna"
                             >
                               <Pencil className="w-2.5 h-2.5" />
                             </button>
@@ -2112,6 +2226,15 @@ export default function App() {
         <Plus className="w-7 h-7" />
       </button>
 
+      {/* MOBILE FLOATING VOICE ASSISTANT BUTTON (OPPOSITE CORNER) */}
+      <button
+        onClick={() => { if (soundEnabled) playPop(); setIsVoiceAssistantOpen(true); }}
+        className="fixed bottom-6 left-6 z-40 md:hidden flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-full shadow-[0_4px_20px_rgba(99,102,241,0.4)] hover:shadow-[0_6px_25px_rgba(99,102,241,0.6)] cursor-pointer transition-all active:scale-95 animate-pulse animate-float-slow"
+        title="Asistente de Voz IA"
+      >
+        <Mic className="w-6 h-6 animate-pulse" />
+      </button>
+
     </div>
   );
 }
@@ -2161,6 +2284,8 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit }: TaskCardPro
     setDragOffset(0);
   };
 
+  const parentColumn = activeColumns[currentIndex];
+
   return (
     <div 
       onMouseDown={(e) => handleStart(e.clientX)}
@@ -2173,9 +2298,14 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit }: TaskCardPro
       style={{
         transform: `translateX(${dragOffset}px) rotate(${dragOffset * 0.04}deg)`,
         transition: isDraggingCard.current ? 'none' : 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-        cursor: isDraggingCard.current ? 'grabbing' : 'grab'
+        cursor: isDraggingCard.current ? 'grabbing' : 'grab',
+        borderColor: parentColumn?.color ? `${parentColumn.color}50` : undefined,
+        backgroundColor: parentColumn?.color ? `${parentColumn.color}18` : '#27272a',
+        boxShadow: parentColumn?.color 
+          ? `0 10px 25px -10px ${parentColumn.color}50, inset 0 0 10px ${parentColumn.color}15` 
+          : '0 10px 25px rgba(0,0,0,0.3)'
       }}
-      className={`task-card-3d p-3.5 rounded-xl bg-zinc-900 border border-zinc-800/80 hover:border-indigo-500/40 shadow-md hover:shadow-[0_10px_25px_rgba(99,102,241,0.12)] hover:-translate-y-1 transform group flex flex-col gap-2.5 relative overflow-hidden select-none touch-none ${task.column === lastColId ? 'bg-zinc-950/40 opacity-40' : ''}`}
+      className={`task-card-3d p-3.5 rounded-xl border border-zinc-700/80 hover:border-indigo-500/50 shadow-md hover:-translate-y-1 transform group flex flex-col gap-2.5 relative overflow-hidden select-none touch-none ${task.column === lastColId ? 'opacity-40 bg-zinc-950/40' : ''}`}
     >
       
       <div className="flex items-center justify-between">

@@ -35,24 +35,28 @@ async function startServer() {
       const columnsList = Array.isArray(existingColumns) ? existingColumns : [];
 
       const systemInstruction = `
-You are the AI Voice Control interpreter for TaskPro 3D.
-Your objective is to convert transcribed Spanish speech commands into clean, actionable Kanban state changes.
+You are the advanced AI Voice Control interpreter for TaskPro 3D, a real-time Kanban board system.
+Your job is to read Spanish transcribed text from the microphone and translate it into clear state-action operations.
 
-Here is the current state of the board:
-- Active sheets/boards list: ${JSON.stringify(sheetsList.map(s => ({ id: s.id, title: s.title, emoji: s.emoji })))}
-- Current columns in active board: ${JSON.stringify(columnsList.map(c => ({ id: c.id, title: c.title })))}
+Current Board State Context:
+- Available Sheets/Boards: ${JSON.stringify(sheetsList.map(s => ({ id: s.id, title: s.title, emoji: s.emoji })))}
+- Column lists in active view: ${JSON.stringify(columnsList.map(c => ({ id: c.id, title: c.title })))}
 
-You can batch multiple actions together in a single request.
-Allowed action types in "actions":
-1. "create_sheet": Create a new board sheet. Requires "title" (string) and appropriate "emoji" (string, e.g. 🎯, 🚀, 💡).
-2. "add_tasks": Add multiple new pending task cards. Requires an array of task titles in "titles".
-3. "delete_tasks": Delete/remove several task cards. Requires an array of matching task titles in "titles".
-4. "switch_sheet": Switch current view to a different existing sheet. Requires either a matching "sheetId" or "title".
-5. "toggle_sound": Enable or disable board sound effects. Requires a "enabled" (boolean).
+Supported Actions:
+1. "create_sheet": Title (string) and emoji (defaulting to appropriate ones like 🎯, 🚀, 💻, 🏠).
+2. "add_tasks": An array "titles" (string[]) of multiple new tasks to create (defaults to first column).
+3. "delete_tasks": An array "titles" (string[]) of card titles to match and remove.
+4. "switch_sheet": Target board "sheetId" or "title" to open.
+5. "toggle_sound": Enabled (boolean) to turn sound effects on or off.
 
-Be helpful and smart:
-- If they ask: "crear hoja proyectos y agregar las tareas comprar cafe y llamar a juan", return TWO actions (1: create_sheet, 2: add_tasks).
-- Provide a brief, conversational, and friendly Spanish spoken audio feedback sentence in "speechFeedback" (e.g. "¡Listo! Creé la hoja Proyectos y agregué las dos tareas."). Keep it concise and natural.
+Fuzzy Interpretation Rules for high-fidelity Spanish transcription:
+- Users speak naturally: "Agrega las tareas comprar pan, comprar queso e ir a la tienda." You must parse the list and split it into three items: ["comprar pan", "comprar queso", "ir a la tienda"].
+- Notice connectors: "y", "e", "además de", "también", commas, pauses. Be aggressive and smart in isolating individual task titles so the user can easily say 5 things in one breath and get them all added cleanly!
+- If the user says: "borrar las tareas comprar pan y comprar leche", add action "delete_tasks" with titles: ["comprar pan", "comprar leche"].
+- Matching Sheets: Fuzzily match Spanish board/sheet requests. If they say "cambiar a proyectos" and there's a sheet "Proyectos 🚀", map to switch_sheet with sheetId "sheet_..." of that sheet.
+- Spanish speech connectors: Convert vocal intents like "por favor agrégate...", "ponme...", "borra...", "sácame...", "crea una hoja que se llame..." to the correct clean actions.
+
+Always include a friendly, concise, and smart auditory confirmation feedback in "speechFeedback" in Spanish, e.g. "¡Por supuesto! Creé la hoja de Proyectos y agregué las tareas: comprar café y llamar a Juan."
 `;
 
       const response = await ai.models.generateContent({
