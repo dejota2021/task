@@ -857,17 +857,8 @@ export default function App() {
       setIsListening(false);
     };
 
-    recognition.onend = async () => {
+    recognition.onend = () => {
       setIsListening(false);
-      // Wait a short moment to make sure the state is fully set
-      setTimeout(async () => {
-        if (recognitionRef.current) {
-          const finalPrompt = voiceText || '';
-          if (finalPrompt.trim()) {
-            await processVoiceCommand(finalPrompt);
-          }
-        }
-      }, 50);
     };
 
     recognitionRef.current = recognition;
@@ -2334,13 +2325,37 @@ export default function App() {
               </div>
             </div>
 
-            {/* Live transcription feedback */}
+            {/* Live transcription feedback and Accept & Execute controls */}
             {voiceText && (
-              <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800/80 animate-fade-in flex flex-col gap-1 text-left">
-                <span className="text-[9px] font-mono font-bold text-indigo-400 uppercase tracking-wider">Transcripción</span>
-                <p className="text-xs italic text-zinc-350 leading-relaxed">
-                  "{voiceText}"
-                </p>
+              <div className="bg-zinc-950 p-4 rounded-2xl border border-zinc-800/80 animate-fade-in flex flex-col gap-3 text-left">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                    Transcripción rápida
+                  </span>
+                  <span className="text-[9px] text-zinc-500 font-mono">Toca para editar si lo deseas</span>
+                </div>
+                
+                <textarea
+                  value={voiceText}
+                  onChange={(e) => setVoiceText(e.target.value)}
+                  placeholder="El comando de voz aparecerá aquí..."
+                  rows={2}
+                  className="bg-zinc-900/60 border border-zinc-800/60 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-indigo-500/80 w-full min-h-[55px] font-medium leading-relaxed resize-none"
+                />
+
+                {!isVoiceProcessing && (
+                  <button
+                    onClick={async () => {
+                      if (soundEnabled) playPop();
+                      await processVoiceCommand(voiceText);
+                    }}
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-extrabold text-xs tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all cursor-pointer animate-pulse"
+                  >
+                    <Check className="w-4 h-4 text-white stroke-[3]" />
+                    <span>Aceptar y Ejecutar Comando</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -2361,43 +2376,6 @@ export default function App() {
                 <span className="text-xs font-semibold leading-snug">{voiceError}</span>
               </div>
             )}
-
-            {/* Command guide */}
-            <div className="border-t border-zinc-850 pt-4 text-left">
-              <span className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest block mb-2.5">
-                Comandos de Voz de Ejemplo:
-              </span>
-              <div className="grid grid-cols-1 gap-2 max-h-[140px] overflow-y-auto pr-1">
-                <div 
-                  onClick={() => { if (!isListening && !isVoiceProcessing) processVoiceCommand("crear hoja proyectos y agregar las tareas comprar cafe y llamar a juan"); }}
-                  className="p-2 rounded-xl bg-zinc-950/55 hover:bg-zinc-950 border border-zinc-850 hover:border-indigo-500/25 cursor-pointer text-[11px] text-zinc-400 hover:text-white transition-all flex flex-col gap-0.5"
-                >
-                  <span className="text-[9px] text-indigo-400 font-bold uppercase tracking-wider">Crear y agregar lotes</span>
-                  <span>"crear hoja proyectos y agregar las tareas comprar cafe y llamar a juan"</span>
-                </div>
-                <div 
-                  onClick={() => { if (!isListening && !isVoiceProcessing) processVoiceCommand("agregar pendientes comprar leche y comprar pan"); }}
-                  className="p-2 rounded-xl bg-zinc-950/55 hover:bg-zinc-950 border border-zinc-850 hover:border-indigo-500/25 cursor-pointer text-[11px] text-zinc-400 hover:text-white transition-all flex flex-col gap-0.5"
-                >
-                  <span className="text-[9px] text-indigo-400 font-bold uppercase tracking-wider">Agregar varios</span>
-                  <span>"agregar pendientes comprar leche y comprar pan"</span>
-                </div>
-                <div 
-                  onClick={() => { if (!isListening && !isVoiceProcessing) processVoiceCommand("eliminar tareas comprar cafe y comprar leche"); }}
-                  className="p-2 rounded-xl bg-zinc-950/55 hover:bg-zinc-950 border border-zinc-850 hover:border-indigo-500/25 cursor-pointer text-[11px] text-zinc-400 hover:text-white transition-all flex flex-col gap-0.5"
-                >
-                  <span className="text-[9px] text-indigo-400 font-bold uppercase tracking-wider">Eliminar varios</span>
-                  <span>"eliminar tareas comprar cafe y comprar leche"</span>
-                </div>
-                <div 
-                  onClick={() => { if (!isListening && !isVoiceProcessing) processVoiceCommand("desactivar sonidos"); }}
-                  className="p-2 rounded-xl bg-zinc-950/55 hover:bg-zinc-950 border border-zinc-850 hover:border-indigo-500/25 cursor-pointer text-[11px] text-zinc-400 hover:text-white transition-all flex flex-col gap-0.5"
-                >
-                  <span className="text-[9px] text-indigo-400 font-bold uppercase tracking-wider">Control de Ajustes</span>
-                  <span>"desactivar sonidos" / "activar sonidos"</span>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -2751,7 +2729,7 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit }: TaskCardPro
         backgroundColor: `${cardVibrantColor}28`,
         boxShadow: `0 10px 25px -6px ${cardVibrantColor}55, inset 0 0 16px ${cardVibrantColor}18`
       }}
-      className="task-card-3d p-3.5 rounded-xl border hover:border-white/80 shadow-md hover:-translate-y-1 transform group flex flex-col gap-2.5 relative overflow-hidden select-none touch-none"
+      className="task-card-3d p-4 rounded-xl border hover:border-white/80 shadow-md hover:-translate-y-1 transform group flex flex-col gap-3 relative select-none touch-none min-h-[110px] h-auto flex-shrink-0"
     >
       
       <div className="flex items-center justify-between">
@@ -2766,12 +2744,12 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit }: TaskCardPro
         )}
       </div>
 
-      <div>
-        <h4 className="font-extrabold text-xs sm:text-sm text-white transition-colors leading-snug line-clamp-2">
+      <div className="flex-1 min-w-0">
+        <h4 className="font-extrabold text-sm text-zinc-100 transition-colors leading-relaxed break-words whitespace-normal py-0.5">
           {task.title}
         </h4>
         {task.description && (
-          <p className="text-[11px] text-zinc-200/90 leading-relaxed mt-0.5 line-clamp-2">
+          <p className="text-[11px] text-zinc-300/90 leading-relaxed mt-1 break-words whitespace-normal">
             {task.description}
           </p>
         )}
