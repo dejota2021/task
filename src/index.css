@@ -94,9 +94,9 @@ body {
 }
 
 .column-3d-container:hover {
-  transform: perspective(1000px) translateY(-8px) translateZ(30px) rotateX(2deg) rotateY(2deg) !important;
-  box-shadow: 0 35px 70px rgba(99, 102, 241, 0.18), 0 15px 35px rgba(0, 0, 0, 0.6);
-  border-color: rgba(99, 102, 241, 0.5) !important;
+  transform: perspective(1000px) translateY(-6px) translateZ(24px) rotateX(1.5deg) rotateY(1.5deg) !important;
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.8), 0 0 25px rgba(255, 159, 10, 0.15);
+  border-color: rgba(255, 159, 10, 0.4) !important;
 }
 
 /* Parallax Z-axis lift for cards inside column on hover */
@@ -106,50 +106,50 @@ body {
 
 .column-3d-container:hover .task-card-3d {
   transform: translateZ(12px);
-  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.6);
 }
 
 /* Smooth custom scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(31, 41, 55, 0.3);
+  background: rgba(18, 19, 22, 0.8);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(75, 85, 99, 0.5);
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(107, 114, 128, 0.7);
+  background: rgba(255, 159, 10, 0.5);
 }
 
 /* Visible premium scrollbar for sheet tabs on mobile */
 .sheet-tabs-scrollbar {
   scrollbar-width: thin !important;
-  scrollbar-color: rgba(99, 102, 241, 0.45) rgba(24, 24, 27, 0.2) !important;
+  scrollbar-color: rgba(255, 159, 10, 0.45) rgba(20, 21, 24, 0.4) !important;
 }
 
 .sheet-tabs-scrollbar::-webkit-scrollbar {
-  height: 4px !important;
+  height: 3px !important;
   display: block !important;
 }
 
 .sheet-tabs-scrollbar::-webkit-scrollbar-track {
-  background: rgba(24, 24, 27, 0.2) !important;
+  background: rgba(20, 21, 24, 0.4) !important;
   border-radius: 9999px !important;
 }
 
 .sheet-tabs-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.45) !important;
+  background: rgba(255, 159, 10, 0.45) !important;
   border-radius: 9999px !important;
 }
 
 .sheet-tabs-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(129, 140, 248, 0.7) !important;
+  background: rgba(255, 159, 10, 0.75) !important;
 }
