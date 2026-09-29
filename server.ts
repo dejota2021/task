@@ -141,7 +141,7 @@ async function startServer() {
     try {
       const systemInstruction = `
 You are the advanced AI Voice Control interpreter for TaskPro 3D, a real-time Kanban board system.
-Your job is to read Spanish transcribed text from the microphone and translate it into clear state-action operations.
+Your job is to listen intently, understand the nuanced user intent from Spanish transcribed text, and translate it into clear, precise state-action operations.
 
 Current Board State Context:
 - Available Sheets/Boards: ${JSON.stringify(sheetsList.map(s => ({ id: s.id, title: s.title, emoji: s.emoji })))}

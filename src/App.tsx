@@ -1542,7 +1542,7 @@ export default function App() {
       
       {/* TOP HEADER */}
       <header className="border-b border-[#22242a] bg-[#0c0d0f]/95 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
+        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3 column-3d-container">
           
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-[#FF9F0A]/15 border border-[#FF9F0A]/30 rounded-xl shadow-[0_0_15px_rgba(255,159,10,0.2)] flex items-center justify-center transition-all duration-300 hover:border-[#FF9F0A]/50">
@@ -1570,7 +1570,7 @@ export default function App() {
           </div>
 
           {/* Undo / Redo controls */}
-          <div className="flex items-center gap-1 bg-[#151619] p-1 rounded-xl border border-[#26282e]">
+          <div className="flex items-center gap-1 bg-[#151619] p-1 rounded-xl border border-[#26282e] column-3d-container">
             <button
               onClick={handleUndo}
               disabled={undoStack.length === 0}
@@ -1664,7 +1664,7 @@ export default function App() {
         ) : (
           <>
             {/* Gamification Banner & Stat Indicators (Modeled after reference dark UI) */}
-            <div className="bg-[#18191c] p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-[#26282e] shadow-xl">
+            <div className="bg-[#18191c] p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-[#26282e] shadow-xl column-3d-container">
               <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
                 
                 {/* Stat 1: Mayor Rendimiento / XP */}
@@ -2481,7 +2481,7 @@ export default function App() {
                     ? 'bg-rose-600 shadow-[0_0_35px_rgba(225,29,72,0.65)] animate-pulse' 
                     : isVoiceProcessing
                       ? 'bg-zinc-800 opacity-50 cursor-not-allowed'
-                      : 'bg-amber-500 hover:bg-amber-500 shadow-[0_0_25px_rgba(99,102,241,0.4)]'
+                      : 'bg-amber-500 hover:bg-amber-500 shadow-[0_0_25px_rgba(255,159,10,0.4)]'
                 }`}
               >
                 {isListening ? (
@@ -2865,7 +2865,7 @@ export default function App() {
       {/* MOBILE FLOATING ADD BUTTON (Bottom Right - Matching previous layout and IMG_0129.png) */}
       <button
         onClick={() => { if (soundEnabled) playPop(); setShowAddTask(true); }}
-        className="fixed bottom-6 right-6 z-40 md:hidden flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-[#FF9F0A] via-[#FFB340] to-amber-500 text-black rounded-full shadow-[0_4px_25px_rgba(255,159,10,0.45)] hover:shadow-[0_6px_30px_rgba(255,159,10,0.65)] cursor-pointer transition-all active:scale-95 animate-pulse animate-float-slow border-2 border-black"
+        className="fixed bottom-6 right-6 z-40 md:hidden flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-[#FF9F0A] via-[#FFB340] to-amber-500 text-black rounded-full shadow-[0_4px_25px_rgba(255,159,10,0.45)] hover:shadow-[0_6px_30px_rgba(255,159,10,0.65)] cursor-pointer transition-all active:scale-95 animate-pulse animate-float-slow border-2 border-black column-3d-container"
         title="Agregar nuevo pendiente"
       >
         <Plus className="w-7 h-7 stroke-[3]" />
@@ -2902,6 +2902,9 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit }: TaskCardPro
   const startX = useRef(0);
   const isDraggingCard = useRef(false);
 
+  // 3D Tilt state
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+
   const handleStart = (clientX: number) => {
     startX.current = clientX;
     isDraggingCard.current = true;
@@ -2929,36 +2932,53 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit }: TaskCardPro
     setDragOffset(0);
   };
 
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    setTilt({ x: -y * 25, y: x * 25 });
+  };
+
+  const handleMouseLeave = () => {
+    setTilt({ x: 0, y: 0 });
+  };
+
   const parentColumn = activeColumns[currentIndex];
   const cardVibrantColor = getColumnVibrantColor(parentColumn, currentIndex);
 
   return (
     <div 
       onMouseDown={(e) => handleStart(e.clientX)}
-      onMouseMove={(e) => handleMove(e.clientX)}
+      onMouseMove={(e) => {
+        handleMove(e.clientX);
+        handleMouseMove(e);
+      }}
       onMouseUp={handleEnd}
-      onMouseLeave={handleEnd}
+      onMouseLeave={() => {
+        handleEnd();
+        handleMouseLeave();
+      }}
       onTouchStart={(e) => { 
-        if (window.innerWidth < 768) return; // Disable touch-sliding completely on mobile!
+        if (window.innerWidth < 768) return; 
         if (e.touches.length > 0) handleStart(e.touches[0].clientX); 
       }}
       onTouchMove={(e) => { 
-        if (window.innerWidth < 768) return; // Disable touch-sliding completely on mobile!
+        if (window.innerWidth < 768) return; 
         if (e.touches.length > 0) handleMove(e.touches[0].clientX); 
       }}
       onTouchEnd={() => {
-        if (window.innerWidth < 768) return; // Disable touch-sliding completely on mobile!
+        if (window.innerWidth < 768) return;
         handleEnd();
       }}
       style={{
-        transform: `translateX(${dragOffset}px) rotate(${dragOffset * 0.04}deg)`,
-        transition: isDraggingCard.current ? 'none' : 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+        transform: `translateX(${dragOffset}px) rotate(${dragOffset * 0.04}deg) perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
+        transition: isDraggingCard.current ? 'none' : 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
         cursor: isDraggingCard.current ? 'grabbing' : 'grab',
         borderColor: `${cardVibrantColor}B5`,
         backgroundColor: `${cardVibrantColor}35`,
         boxShadow: `0 12px 30px -4px ${cardVibrantColor}70, inset 0 0 20px ${cardVibrantColor}25, 0 0 15px ${cardVibrantColor}1F`
       }}
-      className="task-card-3d p-4 rounded-xl border hover:border-white/80 shadow-md hover:-translate-y-1 transform group flex flex-col gap-3 relative select-none touch-none min-h-[110px] h-auto flex-shrink-0"
+      className="task-card-3d p-4 rounded-xl border hover:border-white/80 shadow-md transform group flex flex-col gap-3 relative select-none touch-none min-h-[110px] h-auto flex-shrink-0"
     >
       
       <div className="flex items-center justify-between">
@@ -3388,7 +3408,7 @@ function SheetTab({
         transition: isDragging.current ? 'none' : 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
         cursor: isDragging.current ? 'grabbing' : 'grab'
       }}
-      className={`relative group shrink-0 select-none touch-none`}
+      className={`relative group shrink-0 select-none touch-none column-3d-container`}
     >
       <div
         onClick={() => {
