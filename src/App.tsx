@@ -1674,7 +1674,7 @@ export default function App() {
       
       {/* TOP HEADER */}
       <header className="border-b border-[#22242a] bg-[#0c0d0f]/95 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3 column-3d-container">
+        <div className="w-full px-4 h-16 flex items-center justify-between gap-3 column-3d-container">
           
           <div 
             onMouseMove={handleGeneric3DMove}
@@ -1748,7 +1748,7 @@ export default function App() {
       </header>
 
       {/* MAIN CONTAINER */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-5 flex flex-col gap-5">
+      <main className="flex-1 w-full px-4 sm:px-6 py-5 flex flex-col gap-5 max-w-full">
         {sheets.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-zinc-900/25 border border-zinc-800 rounded-3xl py-20 animate-sheet-transition">
             <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-5 shadow-[0_0_30px_rgba(99,102,241,0.15)] animate-bounce">
@@ -1812,6 +1812,7 @@ export default function App() {
                 
                 {/* Stat 1: Mayor Rendimiento / XP */}
                 <div 
+                  onClick={() => playPop()}
                   onMouseMove={handleGeneric3DMove}
                   onMouseLeave={handleGeneric3DLeave}
                   onTouchMove={handleGeneric3DMove}
@@ -1831,6 +1832,7 @@ export default function App() {
 
                 {/* Stat 2: Tasa de Eficiencia */}
                 <div 
+                  onClick={() => playPop()}
                   onMouseMove={handleGeneric3DMove}
                   onMouseLeave={handleGeneric3DLeave}
                   onTouchMove={handleGeneric3DMove}
@@ -1850,6 +1852,7 @@ export default function App() {
 
                 {/* Stat 3: Movimientos con Tareas */}
                 <div 
+                  onClick={() => playPop()}
                   onMouseMove={handleGeneric3DMove}
                   onMouseLeave={handleGeneric3DLeave}
                   onTouchMove={handleGeneric3DMove}
@@ -3094,7 +3097,7 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isSelected, o
 
   return (
     <div 
-      onMouseDown={(e) => handleStart(e.clientX)}
+      onMouseDown={(e) => { handleStart(e.clientX); playPop(); }}
       onMouseMove={(e) => {
         handleMove(e.clientX);
         handleMouseMove(e);
@@ -3105,6 +3108,7 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isSelected, o
         handleMouseLeave();
       }}
       onTouchStart={(e) => { 
+        playPop();
         if (window.innerWidth < 768) return; 
         if (e.touches.length > 0) handleStart(e.touches[0].clientX); 
       }}
@@ -3124,7 +3128,7 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isSelected, o
         backgroundColor: `${cardVibrantColor}35`,
         boxShadow: `0 12px 30px -4px ${cardVibrantColor}70, inset 0 0 20px ${cardVibrantColor}25, 0 0 15px ${cardVibrantColor}1F`
       }}
-      className="task-card-3d p-2.5 sm:p-3 rounded-xl border hover:border-white/80 shadow-md transform group flex flex-col gap-1.5 relative select-none touch-none min-h-[65px] h-auto flex-shrink-0"
+      className="task-card-3d p-2.5 sm:p-3 rounded-xl border hover:border-white/80 shadow-md transform group flex flex-col gap-1.5 relative select-none touch-pan-y min-h-[65px] h-auto flex-shrink-0"
     >
       
       <div className="flex items-start justify-between gap-1.5 w-full">
@@ -3575,6 +3579,7 @@ function SheetTab({
     >
       <div
         onClick={() => {
+          playPop();
           if (!isActive && !isDragging.current) {
             onSelect();
           }

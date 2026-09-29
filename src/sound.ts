@@ -15,7 +15,7 @@ function getAudioContext(): AudioContext | null {
 }
 
 /**
- * Play a cute bubble pop sound for task creation or UI selection (50% softer volume)
+ * Play a cute bubble pop sound for task creation or UI selection (Crisp and Loud!)
  */
 export function playPop() {
   const ctx = getAudioContext();
@@ -32,15 +32,15 @@ export function playPop() {
   osc.frequency.setValueAtTime(160, ctx.currentTime);
   osc.frequency.exponentialRampToValueAtTime(700, ctx.currentTime + 0.07);
 
-  gain.gain.setValueAtTime(0.35, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.005, ctx.currentTime + 0.09);
+  gain.gain.setValueAtTime(0.85, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.09);
 
   osc.start(ctx.currentTime);
   osc.stop(ctx.currentTime + 0.1);
 }
 
 /**
- * Play a slick whoosh sound when shifting tasks between columns (50% softer volume)
+ * Play a slick whoosh sound when shifting tasks between columns (Crisp and Loud!)
  */
 export function playWoosh() {
   const ctx = getAudioContext();
@@ -57,16 +57,16 @@ export function playWoosh() {
   osc.frequency.setValueAtTime(300, ctx.currentTime);
   osc.frequency.exponentialRampToValueAtTime(140, ctx.currentTime + 0.2);
 
-  gain.gain.setValueAtTime(0.3, ctx.currentTime);
-  gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.08);
-  gain.gain.exponentialRampToValueAtTime(0.005, ctx.currentTime + 0.2);
+  gain.gain.setValueAtTime(0.8, ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.08);
+  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
 
   osc.start(ctx.currentTime);
   osc.stop(ctx.currentTime + 0.21);
 }
 
 /**
- * Play a rich success chime (pentatonic major scale arpeggio) when completing a task (50% softer volume)
+ * Play a rich success chime (pentatonic major scale arpeggio) when completing a task (Crisp and Loud!)
  */
 export function playSuccess() {
   const ctx = getAudioContext();
@@ -87,7 +87,7 @@ export function playSuccess() {
     osc.frequency.setValueAtTime(freq, now + idx * 0.05);
 
     gain.gain.setValueAtTime(0.0, now + idx * 0.05);
-    gain.gain.linearRampToValueAtTime(0.24, now + idx * 0.05 + 0.02);
+    gain.gain.linearRampToValueAtTime(0.75, now + idx * 0.05 + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.05 + duration);
 
     osc.start(now + idx * 0.05);
@@ -96,7 +96,7 @@ export function playSuccess() {
 }
 
 /**
- * Play a grand level-up fanfare for special milestones like creating a board (50% softer volume)
+ * Play a grand level-up fanfare for special milestones like creating a board (Crisp and Loud!)
  */
 export function playFanfare() {
   const ctx = getAudioContext();
@@ -127,7 +127,7 @@ export function playFanfare() {
     const dur = isLast ? 0.5 : 0.25;
 
     gain.gain.setValueAtTime(0.0, now + step.start);
-    gain.gain.linearRampToValueAtTime(isLast ? 0.35 : 0.2, now + step.start + 0.02);
+    gain.gain.linearRampToValueAtTime(isLast ? 0.85 : 0.6, now + step.start + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.001, now + step.start + dur);
 
     osc.start(now + step.start);
@@ -136,7 +136,7 @@ export function playFanfare() {
 }
 
 /**
- * Play a mega celebration sound (fireworks/payout cascade)
+ * Play a mega celebration sound (fireworks/payout cascade) (Crisp and Loud!)
  */
 export function playMegaCelebration() {
   const ctx = getAudioContext();
@@ -165,11 +165,10 @@ export function playMegaCelebration() {
     osc.frequency.exponentialRampToValueAtTime(freq * 1.05, now + idx * 0.04 + 0.12);
 
     gain.gain.setValueAtTime(0.0, now + idx * 0.04);
-    gain.gain.linearRampToValueAtTime(0.24, now + idx * 0.04 + 0.02);
+    gain.gain.linearRampToValueAtTime(0.75, now + idx * 0.04 + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.04 + 0.15);
 
     osc.start(now + idx * 0.04);
     osc.stop(now + idx * 0.04 + 0.16);
   });
 }
-
