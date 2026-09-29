@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Open access for the simplified single collaborative board to prevent any permission errors
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

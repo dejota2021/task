@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>TaskPro</title>
+    <meta name="description" content="Organiza tus tareas de forma interactiva y divertida con tu equipo, con animaciones 3D fluidas, efectos de sonido y sincronización instantánea en la nube." />
+    <meta property="og:title" content="TaskPro · Tablero Colaborativo" />
+    <meta property="og:description" content="Organiza tus tareas de forma interactiva y divertida con tu equipo, con animaciones 3D fluidas, efectos de sonido y sincronización instantánea en la nube." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 630' fill='%2309090b'%3E%3Crect width='1200' height='630' fill='%2309090b'/%3E%3Cg transform='translate(600, 240) scale(7)'%3E%3Crect x='-20' y='-20' width='40' height='40' rx='5' fill='%230c0c0e' stroke='%236366f1' stroke-width='1.5'/%3E%3Cg transform='translate(-12, -12)'%3E%3Crect x='3' y='5' width='6' height='6' rx='1' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='m3 17 2 2 4-4' fill='none' stroke='%2310b981' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M13 6h8' fill='none' stroke='%23f4f4f5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M13 12h8' fill='none' stroke='%23f4f4f5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M13 18h8' fill='none' stroke='%23f4f4f5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='m3 11 2 2 4-4' fill='none' stroke='%2310b981' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/g%3E%3C/g%3E%3Ctext x='600' y='460' font-family='sans-serif' font-size='54' font-weight='bold' fill='%23f4f4f5' text-anchor='middle'%3ETaskPro%3C/text%3E%3Ctext x='600' y='510' font-family='sans-serif' font-size='22' fill='%23a1a1aa' text-anchor='middle'%3ETablero Colaborativo de Tareas en Tiempo Real%3C/text%3E%3C/svg%3E" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 630' fill='%2309090b'%3E%3Crect width='1200' height='630' fill='%2309090b'/%3E%3Cg transform='translate(600, 240) scale(7)'%3E%3Crect x='-20' y='-20' width='40' height='40' rx='5' fill='%230c0c0e' stroke='%236366f1' stroke-width='1.5'/%3E%3Cg transform='translate(-12, -12)'%3E%3Crect x='3' y='5' width='6' height='6' rx='1' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='m3 17 2 2 4-4' fill='none' stroke='%2310b981' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M13 6h8' fill='none' stroke='%23f4f4f5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M13 12h8' fill='none' stroke='%23f4f4f5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M13 18h8' fill='none' stroke='%23f4f4f5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='m3 11 2 2 4-4' fill='none' stroke='%2310b981' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/g%3E%3C/g%3E%3Ctext x='600' y='460' font-family='sans-serif' font-size='54' font-weight='bold' fill='%23f4f4f5' text-anchor='middle'%3ETaskPro%3C/text%3E%3Ctext x='600' y='510' font-family='sans-serif' font-size='22' fill='%23a1a1aa' text-anchor='middle'%3ETablero Colaborativo de Tareas en Tiempo Real%3C/text%3E%3C/svg%3E" />
+    
+    <!-- ListTodo Favicon -->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='6' height='6' rx='1' /%3E%3Cpath d='m3 17 2 2 4-4' /%3E%3Cpath d='M13 6h8' /%3E%3Cpath d='M13 12h8' /%3E%3Cpath d='M13 18h8' /%3E%3Cpath d='m3 11 2 2 4-4' /%3E%3C/svg%3E">
+
+    <!-- Premium Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Syne:wght@700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <style>
+      /* Ultra-clean pitch black and slate grey theme background */
+      html, body {
+        background-color: #09090b;
+        color: #f4f4f5;
+        margin: 0;
+        padding: 0;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        touch-action: pan-x pan-y;
+      }
+
+      /* Independent 3D Floating and rotating keyframes for cards with depth */
+      @keyframes float3dOdd {
+        0% { transform: perspective(1000px) translateY(0px) rotateY(0deg) rotateX(0deg); }
+        25% { transform: perspective(1000px) translateY(-5px) rotateY(1.5deg) rotateX(0.5deg); }
+        50% { transform: perspective(1000px) translateY(-2px) rotateY(-1deg) rotateX(-0.5deg); }
+        75% { transform: perspective(1000px) translateY(-6px) rotateY(0.8deg) rotateX(1deg); }
+        100% { transform: perspective(1000px) translateY(0px) rotateY(0deg) rotateX(0deg); }
+      }
+
+      @keyframes float3dEven {
+        0% { transform: perspective(1000px) translateY(0px) rotateY(0deg) rotateX(0deg); }
+        25% { transform: perspective(1000px) translateY(-3px) rotateY(-1.2deg) rotateX(-0.8deg); }
+        50% { transform: perspective(1000px) translateY(-7px) rotateY(0.8deg) rotateX(0.4deg); }
+        75% { transform: perspective(1000px) translateY(-4px) rotateY(-0.5deg) rotateX(-0.5deg); }
+        100% { transform: perspective(1000px) translateY(0px) rotateY(0deg) rotateX(0deg); }
+      }
+
+      .animate-float-3d-odd {
+        animation: float3dOdd 7s ease-in-out infinite;
+        transform-style: preserve-3d;
+      }
+
+      .animate-float-3d-even {
+        animation: float3dEven 9s ease-in-out infinite;
+        transform-style: preserve-3d;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

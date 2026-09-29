@@ -1,0 +1,8 @@
+{
+  "name": "TaskPro",
+  "description": "Organiza tus tareas de forma interactiva y divertida con tu equipo, con animaciones 3D fluidas, efectos de sonido y sincronización instantánea en la nube.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

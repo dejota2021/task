@@ -1,0 +1,155 @@
+{
+  "entities": {
+    "Board": {
+      "title": "Board",
+      "description": "A collaborative room containing tasks and activities",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "The title of the collaborative board"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]{6}$",
+          "description": "Unique six-digit uppercase alphanumeric board join code"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the board was created"
+        }
+      },
+      "required": ["title", "code", "createdAt"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A task item in one of the columns (pending, progress, done)",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 150,
+          "description": "Task short summary"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Task detail or notes"
+        },
+        "column": {
+          "type": "string",
+          "enum": ["pending", "progress", "done"],
+          "description": "Column placement of the task"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["baja", "media", "alta"],
+          "description": "Priority level of the task"
+        },
+        "points": {
+          "type": "number",
+          "description": "Gamified XP/points value for task completion"
+        },
+        "assignedToName": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Name of the assigned collaborator"
+        },
+        "assignedToAvatar": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Avatar style identifier for the collaborator"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "completedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when task entered Done column"
+        },
+        "completedBy": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Name of the collaborator who completed the task"
+        }
+      },
+      "required": ["title", "column", "priority", "points", "createdAt"]
+    },
+    "Activity": {
+      "title": "Activity",
+      "description": "A real-time action feed entry",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Message describing the action"
+        },
+        "userName": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Name of the active user"
+        },
+        "userAvatar": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Avatar code of the active user"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of the activity"
+        }
+      },
+      "required": ["text", "userName", "userAvatar", "createdAt"]
+    },
+    "Member": {
+      "title": "Member",
+      "description": "Collaborator active presence entry",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Collaborator display name"
+        },
+        "avatar": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Avatar code identifier"
+        },
+        "lastActive": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last active timestamp"
+        }
+      },
+      "required": ["name", "avatar", "lastActive"]
+    }
+  },
+  "firestore": {
+    "/boards/{boardId}": {
+      "schema": "Board",
+      "description": "Primary shared boards"
+    },
+    "/boards/{boardId}/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Tasks associated with a board"
+    },
+    "/boards/{boardId}/activities/{activityId}": {
+      "schema": "Activity",
+      "description": "Real-time activity log for a board"
+    },
+    "/boards/{boardId}/members/{memberId}": {
+      "schema": "Member",
+      "description": "Real-time list of online members"
+    }
+  }
+}
