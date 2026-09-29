@@ -43,6 +43,7 @@ import {
   Layers,
   BarChart3,
   LayoutDashboard,
+  Search,
   Bell,
   Radio,
   Clock,
@@ -322,6 +323,11 @@ export default function App() {
   const [showSyncToast, setShowSyncToast] = useState(true);
   const [syncToastMessage, setSyncToastMessage] = useState('Destinos de tareas y hojas actualizados');
 
+  // Board search filter and Spotlight command palette states
+  const [boardFilterQuery, setBoardFilterQuery] = useState('');
+  const [isSearchPaletteOpen, setIsSearchPaletteOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
   // New task form
   const [showAddTask, setShowAddTask] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
@@ -425,24 +431,37 @@ export default function App() {
         handleRedo();
       }
 
-      // Shortcut [ArrowLeft] to switch sheets
+      // Shortcut [ArrowLeft] to switch sheets (with rotation wrap-around)
       if (e.key === 'ArrowLeft' && !isTyping) {
         e.preventDefault();
         const curIdx = sheets.findIndex(s => s.id === activeSheetId);
         if (curIdx > 0) {
           if (soundEnabled) playWoosh();
           setActiveSheetId(sheets[curIdx - 1].id);
+        } else if (curIdx === 0 && sheets.length > 0) {
+          if (soundEnabled) playWoosh();
+          setActiveSheetId(sheets[sheets.length - 1].id);
         }
       }
 
-      // Shortcut [ArrowRight] to switch sheets
+      // Shortcut [ArrowRight] to switch sheets (with rotation wrap-around)
       if (e.key === 'ArrowRight' && !isTyping) {
         e.preventDefault();
         const curIdx = sheets.findIndex(s => s.id === activeSheetId);
         if (curIdx < sheets.length - 1) {
           if (soundEnabled) playWoosh();
           setActiveSheetId(sheets[curIdx + 1].id);
+        } else if (curIdx === sheets.length - 1 && sheets.length > 0) {
+          if (soundEnabled) playWoosh();
+          setActiveSheetId(sheets[0].id);
         }
+      }
+
+      // Shortcut [Shift + F] to open Spotlight Search Palette
+      if (e.shiftKey && (e.key === 'F' || e.key === 'f') && !isTyping) {
+        e.preventDefault();
+        if (soundEnabled) playPop();
+        setIsSearchPaletteOpen(true);
       }
 
       // Shortcut [Tab] to toggle view between 'board' and 'analytics'
@@ -1658,6 +1677,37 @@ export default function App() {
     return medals;
   };
 
+  // Cross-sheet task search utility for Spotlight palette
+  const getAllTasksAcrossSheets = () => {
+    const all: { task: Task; sheetId: string; sheetTitle: string }[] = [];
+    sheets.forEach(sheet => {
+      if (sheet.id === activeSheetId) {
+        tasks.forEach(t => {
+          all.push({ task: t, sheetId: sheet.id, sheetTitle: sheet.title });
+        });
+      } else {
+        const stored = localStorage.getItem(`sincrotask_tasks_backup_${sheet.id}`);
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            parsed.forEach((t: any) => {
+              all.push({
+                task: {
+                  ...t,
+                  createdAt: new Date(t.createdAt),
+                  completedAt: t.completedAt ? new Date(t.completedAt) : undefined
+                },
+                sheetId: sheet.id,
+                sheetTitle: sheet.title
+              });
+            });
+          } catch (e) {}
+        }
+      }
+    });
+    return all;
+  };
+
   // Stats calculation
   const totalTasks = tasks.length;
   const lastColId = activeColumns[activeColumns.length - 1]?.id || 'done';
@@ -1800,7 +1850,8 @@ export default function App() {
           </div>
         ) : (
           <>
-            {/* Gamification Banner & Stat Indicators (Modeled after reference dark UI) */}
+            <div className="px-4 sm:px-6 md:px-8 flex flex-col gap-5">
+              {/* Gamification Banner & Stat Indicators (Modeled after reference dark UI) */}
             <div 
               onMouseMove={handleGeneric3DMove}
               onMouseLeave={handleGeneric3DLeave}
@@ -2026,15 +2077,38 @@ export default function App() {
                 </button>
               </form>
             ) : (
-              <button
-                onClick={() => { if (soundEnabled) playPop(); setShowAddSheetInput(true); }}
-                className="flex items-center gap-1 px-3 py-1.5 bg-[#18191c] hover:bg-[#222428] border border-[#26282e] rounded-xl text-xs font-bold text-[#FF9F0A] hover:text-white transition-all cursor-pointer whitespace-nowrap"
-              >
-                <Plus className="w-3 h-3 stroke-[2.5]" />
-                <span className="font-sans font-semibold text-xs">Nueva Hoja</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Real-time Inline Task Filter Input */}
+                <div className="relative shrink-0 hidden md:block">
+                  <Search className="w-3.5 h-3.5 text-zinc-600 absolute left-3 top-2.5 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={boardFilterQuery}
+                    onChange={(e) => setBoardFilterQuery(e.target.value)}
+                    placeholder="Filtrar pendientes... (Shift+F)"
+                    className="bg-[#121315]/80 hover:bg-[#151619] focus:bg-black border border-[#26282e] rounded-xl pl-8 pr-7 py-1.5 text-xs text-white placeholder:text-zinc-650 focus:outline-none focus:border-[#FF9F0A] w-48 transition-all"
+                  />
+                  {boardFilterQuery && (
+                    <button 
+                      onClick={() => setBoardFilterQuery('')}
+                      className="absolute right-2.5 top-2 text-zinc-500 hover:text-white p-0.5 rounded-full"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => { if (soundEnabled) playPop(); setShowAddSheetInput(true); }}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-[#18191c] hover:bg-[#222428] border border-[#26282e] rounded-xl text-xs font-bold text-[#FF9F0A] hover:text-white transition-all cursor-pointer whitespace-nowrap"
+                >
+                  <Plus className="w-3 h-3 stroke-[2.5]" />
+                  <span className="font-sans font-semibold text-xs">Nueva Hoja</span>
+                </button>
+              </div>
             )}
           </div>
+        </div>
         </div>
 
         {/* LOADING SHIM */}
@@ -2049,9 +2123,11 @@ export default function App() {
             <div key={`${activeSheetId}_${slideDirection}`} className={`flex flex-col gap-5 ${slideDirection === 'right' ? 'animate-slide-right' : 'animate-slide-left'}`}>
               
               {/* Dynamic Columns Kanban Grid (Centered and Floating on desktop if columns <= 3, otherwise left-aligned for scrollability!) */}
-              <div className={`flex flex-col md:flex-row md:items-start gap-7 overflow-x-auto pb-8 pt-3 scrollbar-thin scrollbar-thumb-slate-800 max-w-full mx-auto ${activeColumns.length <= 3 ? 'md:justify-center' : 'md:justify-start'}`}>
+              <div className={`flex flex-col md:flex-row md:items-start gap-7 overflow-x-auto pb-8 pt-3 px-4 sm:px-6 md:px-8 scrollbar-thin scrollbar-thumb-slate-800 max-w-full mx-auto ${activeColumns.length <= 3 ? 'md:justify-center' : 'md:justify-start'}`}>
                 {activeColumns.map((col, idx) => {
-                  const colTasks = tasks.filter(t => t.column === col.id);
+                  const colTasks = tasks
+                    .filter(t => t.column === col.id)
+                    .filter(t => !boardFilterQuery || t.title.toLowerCase().includes(boardFilterQuery.toLowerCase()) || t.description?.toLowerCase().includes(boardFilterQuery.toLowerCase()));
                   const columnVibrantColor = getColumnVibrantColor(col, idx);
 
                   return (
@@ -3026,6 +3102,129 @@ export default function App() {
       >
         <Mic className="w-6 h-6 animate-pulse" />
       </button>
+
+      {/* SPOTLIGHT SEARCH PALETTE (Command Palette / Shift + F Overlay for Widescreen PC) */}
+      {isSearchPaletteOpen && (
+        <div 
+          className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-start justify-center pt-[10vh] px-4"
+          onClick={() => { if (soundEnabled) playPop(); setIsSearchPaletteOpen(false); }}
+        >
+          <div 
+            className="bg-[#0e1014]/95 border border-[#26282e] w-full max-w-2xl rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-scale-up pointer-events-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Search Input bar */}
+            <div className="relative">
+              <Search className="w-5 h-5 text-[#FF9F0A] absolute left-4 top-3.5 pointer-events-none" />
+              <input 
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Busca hojas o pendientes específicos..."
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl pl-12 pr-10 py-3 text-sm focus:outline-none focus:border-[#FF9F0A] text-white placeholder:text-zinc-650"
+                autoFocus
+              />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3.5 top-3 p-1 rounded-full text-zinc-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Results Grid */}
+            <div className="flex flex-col gap-3.5 max-h-[380px] overflow-y-auto pr-1">
+              
+              {/* Matched Sheets */}
+              <div>
+                <div className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-2 mb-1.5">Hojas ({sheets.filter(s => s.title.toLowerCase().includes(searchQuery.toLowerCase())).length})</div>
+                <div className="flex flex-col gap-1">
+                  {sheets.filter(s => s.title.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 4).map(sheet => (
+                    <button
+                      key={sheet.id}
+                      onClick={() => {
+                        if (soundEnabled) playWoosh();
+                        setActiveSheetId(sheet.id);
+                        setIsSearchPaletteOpen(false);
+                        setSearchQuery('');
+                      }}
+                      className="flex items-center justify-between p-2.5 rounded-xl hover:bg-[#FF9F0A]/10 border border-transparent hover:border-[#FF9F0A]/20 transition-all text-left w-full group cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Layers className="w-4 h-4 text-zinc-550 group-hover:text-[#FF9F0A]" />
+                        <span className="text-xs font-bold text-zinc-200 group-hover:text-white">{sheet.title}</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-zinc-600 group-hover:text-[#FF9F0A]">Ir a hoja ➔</span>
+                    </button>
+                  ))}
+                  {sheets.filter(s => s.title.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                    <div className="text-xs text-zinc-650 px-2 italic py-1">Sin coincidencias</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Matched Tasks */}
+              <div className="border-t border-zinc-900 pt-3">
+                <div className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-2 mb-1.5">
+                  Pendientes ({searchQuery ? getAllTasksAcrossSheets().filter(item => item.task.title.toLowerCase().includes(searchQuery.toLowerCase()) || item.task.description?.toLowerCase().includes(searchQuery.toLowerCase())).length : 0})
+                </div>
+                <div className="flex flex-col gap-1">
+                  {searchQuery ? (
+                    getAllTasksAcrossSheets()
+                      .filter(item => 
+                        item.task.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                        item.task.description?.toLowerCase().includes(searchQuery.toLowerCase())
+                      )
+                      .slice(0, 6)
+                      .map(item => (
+                        <button
+                          key={item.task.id}
+                          onClick={() => {
+                            if (soundEnabled) playSuccess();
+                            setActiveSheetId(item.sheetId);
+                            setEditingTask(item.task);
+                            setEditTaskTitle(item.task.title);
+                            setEditTaskDesc(item.task.description || '');
+                            setIsSearchPaletteOpen(false);
+                            setSearchQuery('');
+                          }}
+                          className="flex items-center justify-between p-2.5 rounded-xl hover:bg-zinc-800/40 border border-transparent hover:border-zinc-800 transition-all text-left w-full group cursor-pointer"
+                        >
+                          <div className="flex-1 min-w-0 pr-3">
+                            <div className="text-xs font-black text-zinc-200 group-hover:text-white truncate">{item.task.title}</div>
+                            {item.task.description && (
+                              <div className="text-[10px] text-zinc-500 truncate group-hover:text-zinc-400 mt-0.5">{item.task.description}</div>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-end shrink-0 gap-1">
+                            <span className="text-[8px] font-mono text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md">
+                              {item.sheetTitle}
+                            </span>
+                            <span className="text-[9px] text-zinc-650 group-hover:text-zinc-400">Ver pendiente ➔</span>
+                          </div>
+                        </button>
+                      ))
+                  ) : (
+                    <div className="text-xs text-zinc-650 px-2 italic py-1">Escribe para buscar...</div>
+                  )}
+                  {searchQuery && getAllTasksAcrossSheets().filter(item => item.task.title.toLowerCase().includes(searchQuery.toLowerCase()) || item.task.description?.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                    <div className="text-xs text-zinc-650 px-2 italic py-1">Sin coincidencias</div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Palette Footer tips */}
+            <div className="border-t border-zinc-900 pt-3 flex justify-between items-center text-[10px] font-mono text-zinc-600">
+              <span>Shift+F para buscar</span>
+              <span>Presiona Esc para cerrar</span>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
