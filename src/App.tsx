@@ -46,7 +46,9 @@ import {
   Bell,
   Radio,
   Clock,
-  PieChart
+  PieChart,
+  Undo2,
+  Redo2
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from './firebase';
 import { playPop, playWoosh, playSuccess, playFanfare } from './sound';
@@ -272,6 +274,45 @@ export default function App() {
   // Sound configuration
   const [soundEnabled, setSoundEnabled] = useState(true);
 
+  // Undo / Redo Stacks State
+  const [undoStack, setUndoStack] = useState<{ label: string; undo: () => Promise<void>; redo: () => Promise<void> }[]>([]);
+  const [redoStack, setRedoStack] = useState<{ label: string; undo: () => Promise<void>; redo: () => Promise<void> }[]>([]);
+
+  const pushAction = (label: string, undo: () => Promise<void>, redo: () => Promise<void>) => {
+    setUndoStack(prev => [...prev, { label, undo, redo }]);
+    setRedoStack([]); // Clear redo stack on new user operation
+  };
+
+  const handleUndo = async () => {
+    if (undoStack.length === 0) return;
+    const action = undoStack[undoStack.length - 1];
+    setUndoStack(prev => prev.slice(0, -1));
+    setRedoStack(prev => [...prev, action]);
+    if (soundEnabled) playWoosh();
+    try {
+      await action.undo();
+      setSyncToastMessage(`Deshecho: ${action.label}`);
+      setShowSyncToast(true);
+    } catch (err) {
+      console.error("Error executing undo:", err);
+    }
+  };
+
+  const handleRedo = async () => {
+    if (redoStack.length === 0) return;
+    const action = redoStack[redoStack.length - 1];
+    setRedoStack(prev => prev.slice(0, -1));
+    setUndoStack(prev => [...prev, action]);
+    if (soundEnabled) playWoosh();
+    try {
+      await action.redo();
+      setSyncToastMessage(`Rehecho: ${action.label}`);
+      setShowSyncToast(true);
+    } catch (err) {
+      console.error("Error executing redo:", err);
+    }
+  };
+
   // Real-time sync notification toast matching reference image
   const [showSyncToast, setShowSyncToast] = useState(true);
   const [syncToastMessage, setSyncToastMessage] = useState('Destinos de tareas y hojas actualizados');
@@ -347,6 +388,7 @@ export default function App() {
         activeEl.getAttribute('contenteditable') === 'true'
       );
 
+      // Shortcut [Shift + A] for desktop layout to add a new pending task
       if (e.shiftKey && (e.key === 'A' || e.key === 'a') && !isTyping) {
         e.preventDefault();
         if (soundEnabled) playPop();
@@ -361,6 +403,21 @@ export default function App() {
         setTimeout(() => {
           handleStartVoiceRecognition();
         }, 150);
+      }
+
+      // Shortcut [Ctrl/Cmd + Z] for Undo
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      }
+
+      // Shortcut [Ctrl/Cmd + Y] or [Ctrl/Cmd + Shift + Z] for Redo
+      if (
+        ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'z' || e.key === 'Z'))
+      ) {
+        e.preventDefault();
+        handleRedo();
       }
     };
 
@@ -998,8 +1055,14 @@ export default function App() {
 
     const firstColId = activeColumns[0]?.id || 'pending';
     const tempId = 'task_' + Math.random().toString(36).substr(2, 9);
+    
+    // Instantly define task Doc Reference to lock ID across undo/redo actions
+    const tasksRef = collection(db, 'boards', activeSheetId, 'tasks');
+    const taskDocRef = doc(tasksRef);
+    const resolvedId = isOfflineFallback ? tempId : taskDocRef.id;
+
     const newTask: Task = {
-      id: tempId,
+      id: resolvedId,
       title: taskTitle.trim(),
       description: taskDesc.trim(),
       column: firstColId,
@@ -1014,11 +1077,29 @@ export default function App() {
     setTaskTitle('');
     setTaskDesc('');
 
+    // Register Undo/Redo Action
+    pushAction(
+      `Crear "${newTask.title}"`,
+      async () => {
+        const ref = doc(db, 'boards', activeSheetId, 'tasks', newTask.id);
+        await deleteDoc(ref);
+      },
+      async () => {
+        const ref = doc(db, 'boards', activeSheetId, 'tasks', newTask.id);
+        await setDoc(ref, {
+          title: newTask.title,
+          description: newTask.description,
+          column: newTask.column,
+          points: 1,
+          createdAt: newTask.createdAt
+        });
+      }
+    );
+
     if (isOfflineFallback) return;
 
     try {
-      const tasksRef = collection(db, 'boards', activeSheetId, 'tasks');
-      await addDoc(tasksRef, {
+      await setDoc(taskDocRef, {
         title: newTask.title,
         description: newTask.description,
         column: newTask.column,
@@ -1042,8 +1123,13 @@ export default function App() {
 
     const firstColId = activeColumns[0]?.id || 'pending';
     const tempId = 'task_' + Math.random().toString(36).substr(2, 9);
+
+    const tasksRef = collection(db, 'boards', activeSheetId, 'tasks');
+    const taskDocRef = doc(tasksRef);
+    const resolvedId = isOfflineFallback ? tempId : taskDocRef.id;
+
     const newTask: Task = {
-      id: tempId,
+      id: resolvedId,
       title: title,
       description: inlineTaskDesc.trim(),
       column: firstColId,
@@ -1057,11 +1143,29 @@ export default function App() {
     setInlineTaskTitle('');
     setInlineTaskDesc('');
 
+    // Register Undo/Redo Action
+    pushAction(
+      `Crear "${newTask.title}"`,
+      async () => {
+        const ref = doc(db, 'boards', activeSheetId, 'tasks', newTask.id);
+        await deleteDoc(ref);
+      },
+      async () => {
+        const ref = doc(db, 'boards', activeSheetId, 'tasks', newTask.id);
+        await setDoc(ref, {
+          title: newTask.title,
+          description: newTask.description,
+          column: newTask.column,
+          points: 1,
+          createdAt: newTask.createdAt
+        });
+      }
+    );
+
     if (isOfflineFallback) return;
 
     try {
-      const tasksRef = collection(db, 'boards', activeSheetId, 'tasks');
-      await addDoc(tasksRef, {
+      await setDoc(taskDocRef, {
         title: newTask.title,
         description: newTask.description,
         column: newTask.column,
@@ -1082,12 +1186,17 @@ export default function App() {
 
     if (soundEnabled) playPop();
 
+    const oldTitle = editingTask.title;
+    const oldDesc = editingTask.description || '';
+    const newTitle = editTaskTitle.trim();
+    const newDesc = editTaskDesc.trim();
+
     const updatedTasks = tasks.map(t => {
       if (t.id === editingTask.id) {
         return {
           ...t,
-          title: editTaskTitle.trim(),
-          description: editTaskDesc.trim()
+          title: newTitle,
+          description: newDesc
         };
       }
       return t;
@@ -1097,13 +1206,26 @@ export default function App() {
     localStorage.setItem(`sincrotask_tasks_backup_${activeSheetId}`, JSON.stringify(updatedTasks));
     setEditingTask(null);
 
+    // Register Undo/Redo Action
+    pushAction(
+      `Editar "${newTitle}"`,
+      async () => {
+        const ref = doc(db, 'boards', activeSheetId, 'tasks', editingTask.id);
+        await updateDoc(ref, { title: oldTitle, description: oldDesc });
+      },
+      async () => {
+        const ref = doc(db, 'boards', activeSheetId, 'tasks', editingTask.id);
+        await updateDoc(ref, { title: newTitle, description: newDesc });
+      }
+    );
+
     if (isOfflineFallback) return;
 
     try {
       const taskDocRef = doc(db, 'boards', activeSheetId, 'tasks', editingTask.id);
       await updateDoc(taskDocRef, {
-        title: editTaskTitle.trim(),
-        description: editTaskDesc.trim()
+        title: newTitle,
+        description: newDesc
       });
     } catch (err) {
       console.warn("Firebase task edit failed:", err);
@@ -1120,13 +1242,15 @@ export default function App() {
 
     const nextColumn = activeColumns[nextIndex];
     const lastColId = activeColumns[activeColumns.length - 1]?.id || 'done';
+    const oldColumnId = task.column;
+    const newColumnId = nextColumn.id;
     
     const updatedTasks = tasks.map(t => {
       if (t.id === task.id) {
         return {
           ...t,
-          column: nextColumn.id,
-          completedAt: nextColumn.id === lastColId ? new Date() : undefined
+          column: newColumnId,
+          completedAt: newColumnId === lastColId ? new Date() : undefined
         };
       }
       return t;
@@ -1135,7 +1259,7 @@ export default function App() {
     setTasks(updatedTasks);
     localStorage.setItem(`sincrotask_tasks_backup_${activeSheetId}`, JSON.stringify(updatedTasks));
 
-    if (nextColumn.id === lastColId) {
+    if (newColumnId === lastColId) {
       if (soundEnabled) playSuccess();
       setCelebrationTask({
         title: task.title,
@@ -1160,13 +1284,32 @@ export default function App() {
       if (soundEnabled) playWoosh();
     }
 
+    // Register Undo/Redo Action
+    pushAction(
+      `Mover "${task.title}"`,
+      async () => {
+        const ref = doc(db, 'boards', activeSheetId, 'tasks', task.id);
+        await updateDoc(ref, { 
+          column: oldColumnId, 
+          completedAt: oldColumnId === lastColId ? new Date() : null 
+        });
+      },
+      async () => {
+        const ref = doc(db, 'boards', activeSheetId, 'tasks', task.id);
+        await updateDoc(ref, { 
+          column: newColumnId, 
+          completedAt: newColumnId === lastColId ? new Date() : null 
+        });
+      }
+    );
+
     if (isOfflineFallback) return;
 
     try {
       const taskDocRef = doc(db, 'boards', activeSheetId, 'tasks', task.id);
       await updateDoc(taskDocRef, { 
-        column: nextColumn.id,
-        completedAt: nextColumn.id === lastColId ? new Date() : null
+        column: newColumnId,
+        completedAt: newColumnId === lastColId ? new Date() : null
       });
     } catch (err) {
       console.warn("Firebase task move failed, switched to local storage:", err);
@@ -1182,6 +1325,25 @@ export default function App() {
     const updatedTasks = tasks.filter(t => t.id !== task.id);
     setTasks(updatedTasks);
     localStorage.setItem(`sincrotask_tasks_backup_${activeSheetId}`, JSON.stringify(updatedTasks));
+
+    // Register Undo/Redo Action
+    pushAction(
+      `Eliminar "${task.title}"`,
+      async () => {
+        const ref = doc(db, 'boards', activeSheetId, 'tasks', task.id);
+        await setDoc(ref, {
+          title: task.title,
+          description: task.description || '',
+          column: task.column,
+          points: 1,
+          createdAt: task.createdAt instanceof Date ? task.createdAt : new Date(task.createdAt)
+        });
+      },
+      async () => {
+        const ref = doc(db, 'boards', activeSheetId, 'tasks', task.id);
+        await deleteDoc(ref);
+      }
+    );
 
     if (isOfflineFallback) return;
 
@@ -1404,6 +1566,26 @@ export default function App() {
             >
               <BarChart3 className="w-3.5 h-3.5" />
               <span>Gráficos</span>
+            </button>
+          </div>
+
+          {/* Undo / Redo controls */}
+          <div className="flex items-center gap-1 bg-[#151619] p-1 rounded-xl border border-[#26282e]">
+            <button
+              onClick={handleUndo}
+              disabled={undoStack.length === 0}
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-[#FF9F0A] disabled:opacity-20 disabled:hover:text-zinc-400 cursor-pointer transition-all flex items-center justify-center"
+              title="Deshacer (Ctrl+Z)"
+            >
+              <Undo2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={handleRedo}
+              disabled={redoStack.length === 0}
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-[#FF9F0A] disabled:opacity-20 disabled:hover:text-zinc-400 cursor-pointer transition-all flex items-center justify-center"
+              title="Hacer (Ctrl+Y)"
+            >
+              <Redo2 className="w-3.5 h-3.5" />
             </button>
           </div>
 
@@ -2692,7 +2874,7 @@ export default function App() {
       {/* MOBILE FLOATING VOICE ASSISTANT BUTTON (Bottom Left - Matching previous layout and IMG_0129.png) */}
       <button
         onClick={() => { if (soundEnabled) playPop(); setIsVoiceAssistantOpen(true); }}
-        className="fixed bottom-6 left-6 z-40 md:hidden flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-[#a855f7] via-[#b86df9] to-purple-500 text-white rounded-full shadow-[0_4px_25px_rgba(168,85,247,0.45)] hover:shadow-[0_6px_30px_rgba(168,85,247,0.65)] cursor-pointer transition-all active:scale-95 animate-pulse border-2 border-black"
+        className="fixed bottom-6 left-6 z-40 md:hidden flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-[#FF9F0A] via-[#FFB340] to-amber-500 text-black rounded-full shadow-[0_4px_25px_rgba(255,159,10,0.45)] hover:shadow-[0_6px_30px_rgba(255,159,10,0.65)] cursor-pointer transition-all active:scale-95 animate-pulse border-2 border-black"
         title="Asistente de Voz IA"
       >
         <Mic className="w-6 h-6 animate-pulse" />
