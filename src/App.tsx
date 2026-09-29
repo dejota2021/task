@@ -54,29 +54,27 @@ interface KanbanColumn {
 
 // Vibrant color palette constants ensuring columns and cards share cohesive vibrant colors
 export const VIBRANT_COLUMN_PALETTE = [
-  '#6366f1', // Electric Indigo
-  '#f59e0b', // Radiant Amber / Gold
-  '#06b6d4', // Neon Cyan
-  '#10b981', // Vibrant Emerald
-  '#f43f5e', // Hot Coral / Rose
-  '#a855f7', // Electric Purple
-  '#3b82f6', // Vivid Blue
-  '#f97316', // Bright Orange
+  '#FF3B30', // System Red
+  '#34C759', // System Green
+  '#007AFF', // System Blue
+  '#5856D6', // System Violet
+  '#FF9500', // System Orange
+  '#FF2D55', // System Pink
+  '#AF52DE', // System Purple
+  '#5AC8FA', // System Teal
+  '#FFCC00', // System Yellow
 ];
 
 export const VIBRANT_COLOR_SWATCHES = [
-  { hex: '#6366f1', name: 'Índigo' },
-  { hex: '#f59e0b', name: 'Ámbar' },
-  { hex: '#06b6d4', name: 'Cian' },
-  { hex: '#10b981', name: 'Esmeralda' },
-  { hex: '#f43f5e', name: 'Coral' },
-  { hex: '#a855f7', name: 'Púrpura' },
-  { hex: '#3b82f6', name: 'Azul' },
-  { hex: '#f97316', name: 'Naranja' },
-  { hex: '#84cc16', name: 'Lima' },
-  { hex: '#ec4899', name: 'Fucsia' },
-  { hex: '#e11d48', name: 'Rojo' },
-  { hex: '#71717a', name: 'Gris' }
+  { hex: '#FF3B30', name: 'Rojo' },
+  { hex: '#34C759', name: 'Verde' },
+  { hex: '#007AFF', name: 'Azul' },
+  { hex: '#5856D6', name: 'Índigo' },
+  { hex: '#FF9500', name: 'Naranja' },
+  { hex: '#FF2D55', name: 'Rosa' },
+  { hex: '#AF52DE', name: 'Púrpura' },
+  { hex: '#5AC8FA', name: 'Teal' },
+  { hex: '#FFCC00', name: 'Amarillo' },
 ];
 
 export const getColumnVibrantColor = (col?: KanbanColumn | null, index = 0): string => {
@@ -182,7 +180,6 @@ function parseVoiceCommandFallbackClient(text: string, sheets: any[], columns: a
 interface Sheet {
   id: string;
   title: string;
-  emoji: string;
   createdAt: number;
   columns?: KanbanColumn[]; // custom columns stored per board/sheet
   order?: number;
@@ -217,9 +214,6 @@ interface Particle3D {
   rotSpeedZ: number;
 }
 
-// Pre-defined productivity emojis list
-const FUN_EMOJIS = ['🎯', '💼', '🏠', '🚀', '🎨', '🔥', '📚', '🍕', '🎮', '💡', '🏆', '⭐', '🍀', '🛠️', '✈️'];
-
 // Default columns set used if not configured in the Firestore board doc
 const DEFAULT_COLUMNS: KanbanColumn[] = [
   { id: 'pending', title: 'Pendientes' },
@@ -245,12 +239,10 @@ export default function App() {
   // Sheet creation form
   const [showAddSheetInput, setShowAddSheetInput] = useState(false);
   const [newSheetTitle, setNewSheetTitle] = useState('');
-  const [newSheetEmoji, setNewSheetEmoji] = useState('');
 
   // Edit sheet modal form
   const [editingSheet, setEditingSheet] = useState<Sheet | null>(null);
   const [editSheetTitle, setEditSheetTitle] = useState('');
-  const [editSheetEmoji, setEditSheetEmoji] = useState('');
 
   // Edit task modal form
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -388,7 +380,6 @@ export default function App() {
         sheetsList.push({
           id: docSnap.id,
           title: data.title || docSnap.id,
-          emoji: '',
           createdAt: data.createdAt || Date.now(),
           columns: data.columns || DEFAULT_COLUMNS,
           order: data.order ?? 0
@@ -476,8 +467,10 @@ export default function App() {
       }
     };
 
+    // Load local storage cache instantly to eliminate any visual lag when switching sheets!
+    loadLocalTasksBackup();
+
     if (isOfflineFallback) {
-      loadLocalTasksBackup();
       setLoading(false);
       return;
     }
@@ -572,7 +565,6 @@ export default function App() {
     const newSheet: Sheet = {
       id: newId,
       title: title,
-      emoji: newSheetEmoji,
       createdAt: Date.now(),
       columns: DEFAULT_COLUMNS,
       order: sheets.length
@@ -583,7 +575,6 @@ export default function App() {
     localStorage.setItem('sincrotask_sheets_list', JSON.stringify(updatedSheets));
     setActiveSheetId(newId);
     setNewSheetTitle('');
-    setNewSheetEmoji('🎯');
     setShowAddSheetInput(false);
 
     if (isOfflineFallback) return;
@@ -591,7 +582,6 @@ export default function App() {
     try {
       await setDoc(doc(db, 'boards', newId), {
         title: title,
-        emoji: newSheet.emoji,
         createdAt: newSheet.createdAt,
         columns: DEFAULT_COLUMNS,
         order: newSheet.order
@@ -611,11 +601,10 @@ export default function App() {
     if (soundEnabled) playPop();
 
     const title = editSheetTitle.trim();
-    const emoji = editSheetEmoji;
 
     const updatedSheets = sheets.map(s => {
       if (s.id === editingSheet.id) {
-        return { ...s, title, emoji };
+        return { ...s, title };
       }
       return s;
     });
@@ -628,8 +617,7 @@ export default function App() {
 
     try {
       await updateDoc(doc(db, 'boards', editingSheet.id), {
-        title: title,
-        emoji: emoji
+        title: title
       });
     } catch (err) {
       console.warn("Unable to edit sheet online (Permissions):", err);
@@ -677,11 +665,9 @@ export default function App() {
         const title = action.title?.trim();
         if (title) {
           const newId = 'sheet_' + Math.random().toString(36).substr(2, 9);
-          const emoji = action.emoji || '🎯';
           const newSheet: Sheet = {
             id: newId,
             title,
-            emoji,
             createdAt: Date.now(),
             columns: DEFAULT_COLUMNS,
             order: currentSheets.length
@@ -696,7 +682,6 @@ export default function App() {
             try {
               await setDoc(doc(db, 'boards', newId), {
                 title,
-                emoji,
                 createdAt: newSheet.createdAt,
                 columns: DEFAULT_COLUMNS,
                 order: newSheet.order
@@ -903,6 +888,9 @@ export default function App() {
       if (result.actions && result.actions.length > 0) {
         await executeVoiceActions(result.actions, result.speechFeedback);
         setVoiceSuccessMessage(result.speechFeedback);
+        // Automatically close modal and return to initial screen
+        setIsVoiceAssistantOpen(false);
+        setVoiceText('');
       } else {
         setVoiceSuccessMessage(result.speechFeedback || 'Comando entendido.');
         if ('speechSynthesis' in window) {
@@ -917,9 +905,37 @@ export default function App() {
       const fallbackResult = parseVoiceCommandFallbackClient(command, sheets, activeColumns);
       await executeVoiceActions(fallbackResult.actions, fallbackResult.speechFeedback);
       setVoiceSuccessMessage(fallbackResult.speechFeedback);
+      // Automatically close modal and return to initial screen
+      setIsVoiceAssistantOpen(false);
+      setVoiceText('');
     } finally {
       setIsVoiceProcessing(false);
     }
+  };
+
+  // Highly premium interactive 3D parallax column tilt on mouse hover
+  const handleColumnMouseMove3D = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (window.innerWidth < 1024) return;
+    const el = e.currentTarget;
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const xc = rect.width / 2;
+    const yc = rect.height / 2;
+    // Bounded smooth rotation
+    const rotateY = ((x - xc) / xc) * 7; // up to 7 degrees
+    const rotateX = -((y - yc) / yc) * 7;
+    
+    el.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.015, 1.015, 1.015)`;
+    el.style.boxShadow = '0 30px 65px rgba(0, 0, 0, 0.65)';
+    el.style.transition = 'transform 0.15s cubic-bezier(0.25, 1, 0.5, 1)';
+  };
+
+  const handleColumnMouseLeave3D = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    el.style.transform = '';
+    el.style.boxShadow = '';
+    el.style.transition = 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)';
   };
 
   // Reorganize sheet position (swap with neighbor and update order)
@@ -1355,8 +1371,8 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
           
           <div className="flex items-center">
-            <div className="p-2 bg-indigo-600/10 border border-indigo-500/30 rounded-xl shadow-[0_0_15px_rgba(99,102,241,0.2)] flex items-center justify-center transition-all duration-300 hover:border-indigo-400/50 hover:shadow-[0_0_20px_rgba(99,102,241,0.4)]">
-              <ListTodo className="w-5 h-5 text-indigo-400 filter drop-shadow-[0_0_4px_rgba(99,102,241,0.5)] cursor-pointer" />
+            <div className="p-2 bg-violet-600/10 border border-violet-500/30 rounded-xl shadow-[0_0_15px_rgba(99,102,241,0.2)] flex items-center justify-center transition-all duration-300 hover:border-violet-400/50 hover:shadow-[0_0_20px_rgba(99,102,241,0.4)]">
+              <ListTodo className="w-5 h-5 text-violet-400 filter drop-shadow-[0_0_4px_rgba(99,102,241,0.5)] cursor-pointer" />
             </div>
           </div>
 
@@ -1364,13 +1380,13 @@ export default function App() {
           <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800/60">
             <button
               onClick={() => { if (soundEnabled) playPop(); setActiveView('board'); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeView === 'board' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeView === 'board' ? 'bg-violet-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
             >
               Tablero
             </button>
             <button
               onClick={() => { if (soundEnabled) playPop(); setActiveView('analytics'); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeView === 'analytics' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeView === 'analytics' ? 'bg-violet-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
             >
               Analíticas
             </button>
@@ -1379,12 +1395,12 @@ export default function App() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => { if (soundEnabled) playPop(); setIsVoiceAssistantOpen(true); }}
-              className="hidden md:flex p-2 px-3 rounded-xl bg-indigo-600/15 border border-indigo-500/35 text-indigo-400 hover:text-white transition-all cursor-pointer items-center gap-1.5 shadow-[0_0_12px_rgba(99,102,241,0.15)] hover:border-indigo-400"
+              className="hidden md:flex p-2 px-3 rounded-xl bg-violet-600/15 border border-violet-500/35 text-violet-400 hover:text-white transition-all cursor-pointer items-center gap-1.5 shadow-[0_0_12px_rgba(99,102,241,0.15)] hover:border-violet-400"
               title="Asistente de Voz IA (Shift + V)"
             >
-              <Mic className="w-4 h-4 animate-pulse text-indigo-400" />
+              <Mic className="w-4 h-4 animate-pulse text-violet-400" />
               <span className="text-[10px] font-extrabold tracking-wider uppercase">Voz IA</span>
-              <kbd className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-950/80 border border-indigo-500/30 text-indigo-300 font-mono font-bold">⇧V</kbd>
+              <kbd className="text-[9px] px-1.5 py-0.5 rounded bg-violet-950/80 border border-violet-500/30 text-violet-300 font-mono font-bold">⇧V</kbd>
             </button>
             <button 
               onClick={() => { setSoundEnabled(!soundEnabled); if (!soundEnabled) setTimeout(playPop, 50); }}
@@ -1401,7 +1417,7 @@ export default function App() {
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-5 flex flex-col gap-5">
         {sheets.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-zinc-900/25 border border-zinc-800 rounded-3xl py-20 animate-sheet-transition">
-            <div className="w-16 h-16 rounded-2xl bg-indigo-600/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-5 shadow-[0_0_30px_rgba(99,102,241,0.15)] animate-bounce">
+            <div className="w-16 h-16 rounded-2xl bg-violet-600/10 border border-violet-500/30 flex items-center justify-center text-violet-400 mb-5 shadow-[0_0_30px_rgba(99,102,241,0.15)] animate-bounce">
               <ListTodo className="w-8 h-8" />
             </div>
             <h3 className="text-lg font-extrabold text-white mb-2">No hay hojas creadas</h3>
@@ -1411,14 +1427,13 @@ export default function App() {
             {showAddSheetInput ? (
               <form onSubmit={handleAddSheet} className="flex flex-col sm:flex-row items-center gap-2.5 p-3 bg-zinc-950 border border-zinc-800 rounded-2xl animate-scale-up shadow-2xl max-w-md w-full">
                 <div className="flex items-center gap-2 flex-1 w-full">
-                  <span className="text-xl p-1 bg-zinc-900 border border-zinc-800 rounded-lg shrink-0">{newSheetEmoji}</span>
                   <input 
                     type="text" 
                     value={newSheetTitle}
                     onChange={(e) => setNewSheetTitle(e.target.value)}
                     placeholder="Nombre de tu primera hoja..."
                     maxLength={20}
-                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:border-indigo-500 text-white placeholder:text-zinc-500 flex-1 w-full"
+                    className="bg-black border border-zinc-800 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:border-violet-500 text-white placeholder:text-zinc-500 flex-1 w-full"
                     autoFocus
                     required
                   />
@@ -1433,7 +1448,7 @@ export default function App() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/10 cursor-pointer"
+                    className="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-violet-600/10 cursor-pointer"
                   >
                     Crear Hoja
                   </button>
@@ -1442,7 +1457,7 @@ export default function App() {
             ) : (
               <button
                 onClick={() => { if (soundEnabled) playPop(); setShowAddSheetInput(true); }}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-600/20 cursor-pointer flex items-center gap-2"
+                className="px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-violet-600/20 cursor-pointer flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
                 <span>Crear mi Primera Hoja</span>
@@ -1464,12 +1479,12 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2.5 border-x border-zinc-850 px-2">
-            <div className="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
-              <CheckCircle2 className="w-5 h-5 text-indigo-400" />
+            <div className="p-2 bg-violet-500/10 border border-violet-500/20 rounded-xl">
+              <CheckCircle2 className="w-5 h-5 text-violet-400" />
             </div>
             <div className="min-w-0">
               <div className="text-[9px] text-zinc-400 font-bold uppercase truncate">Listos</div>
-              <div className="text-sm sm:text-base font-mono font-black text-indigo-300">{completedTasksCount}</div>
+              <div className="text-sm sm:text-base font-mono font-black text-violet-300">{completedTasksCount}</div>
             </div>
           </div>
 
@@ -1507,17 +1522,17 @@ export default function App() {
                 if (soundEnabled) playPop();
                 setShowMobileSheetsDrawer(true);
               }}
-              className="flex-1 flex items-center justify-between px-3 py-2 rounded-xl bg-zinc-950 border border-indigo-500/30 text-white font-extrabold text-xs shadow-inner active:scale-[0.98] transition-all cursor-pointer"
+              className="flex-1 flex items-center justify-between px-3 py-2 rounded-xl bg-zinc-950 border border-violet-500/30 text-white font-extrabold text-xs shadow-inner active:scale-[0.98] transition-all cursor-pointer"
             >
-              <div className="flex items-center gap-2 truncate">
-                <span className="text-base">{activeSheet?.emoji || '🎯'}</span>
+              <div className="flex items-center gap-1.5 truncate">
+                <Layers className="w-3.5 h-3.5 text-violet-400" />
                 <span className="truncate max-w-[130px] text-zinc-100">{activeSheet?.title || 'Mi Tablero'}</span>
               </div>
-              <div className="flex items-center gap-1.5 shrink-0 text-indigo-400">
-                <span className="text-[10px] font-mono font-bold bg-indigo-950/80 px-2 py-0.5 rounded-full border border-indigo-500/30">
+              <div className="flex items-center gap-1.5 shrink-0 text-violet-400">
+                <span className="text-[10px] font-mono font-bold bg-violet-950/80 px-2 py-0.5 rounded-full border border-violet-500/30">
                   {tasks.length}
                 </span>
-                <ChevronDown className="w-4 h-4 text-indigo-400" />
+                <ChevronDown className="w-4 h-4 text-violet-400" />
               </div>
             </button>
 
@@ -1541,7 +1556,7 @@ export default function App() {
                 if (soundEnabled) playPop();
                 setShowAddSheetInput(true);
               }}
-              className="p-2.5 rounded-xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 active:scale-95 transition-all cursor-pointer hover:bg-indigo-600 hover:text-white"
+              className="p-2.5 rounded-xl bg-violet-600/20 border border-violet-500/40 text-violet-400 active:scale-95 transition-all cursor-pointer hover:bg-violet-600 hover:text-white"
               title="Nueva Hoja"
             >
               <Plus className="w-4 h-4" />
@@ -1557,13 +1572,13 @@ export default function App() {
                 onChange={(e) => setNewSheetTitle(e.target.value)}
                 placeholder="Nombre de nueva hoja..."
                 maxLength={20}
-                className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-indigo-500 text-white placeholder:text-zinc-600 flex-1"
+                className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-violet-500 text-white placeholder:text-zinc-600 flex-1"
                 autoFocus
                 required
               />
               <button 
                 type="submit"
-                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold cursor-pointer"
+                className="px-3 py-1 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-bold cursor-pointer"
               >
                 Crear
               </button>
@@ -1602,7 +1617,6 @@ export default function App() {
                   onEdit={() => {
                     setEditingSheet(sheet);
                     setEditSheetTitle(sheet.title);
-                    setEditSheetEmoji(sheet.emoji);
                   }}
                   deletingSheetId={deletingSheetId}
                   setDeletingSheetId={setDeletingSheetId}
@@ -1622,13 +1636,13 @@ export default function App() {
                   onChange={(e) => setNewSheetTitle(e.target.value)}
                   placeholder="Nueva Hoja..."
                   maxLength={20}
-                  className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-indigo-500 text-white placeholder:text-zinc-600 w-32"
+                  className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-violet-500 text-white placeholder:text-zinc-600 w-32"
                   autoFocus
                   required
                 />
                 <button 
                   type="submit"
-                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold cursor-pointer"
+                  className="px-2.5 py-1 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-bold cursor-pointer"
                 >
                   Ok
                 </button>
@@ -1643,7 +1657,7 @@ export default function App() {
             ) : (
               <button
                 onClick={() => { if (soundEnabled) playPop(); setShowAddSheetInput(true); }}
-                className="flex items-center gap-1 px-3 py-1.5 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-all cursor-pointer whitespace-nowrap"
+                className="flex items-center gap-1 px-3 py-1.5 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-bold text-violet-400 hover:text-violet-300 transition-all cursor-pointer whitespace-nowrap"
               >
                 <Plus className="w-3 h-3" />
                 <span className="font-sans font-semibold text-xs">Nueva Hoja</span>
@@ -1694,7 +1708,6 @@ export default function App() {
                         onEdit={() => {
                           setEditingSheet(sheet);
                           setEditSheetTitle(sheet.title);
-                          setEditSheetEmoji(sheet.emoji);
                         }}
                         deletingSheetId={deletingSheetId}
                         setDeletingSheetId={setDeletingSheetId}
@@ -1711,7 +1724,7 @@ export default function App() {
         {/* LOADING SHIM */}
         {loading ? (
           <div className="flex-1 flex flex-col items-center justify-center py-20 bg-slate-900/10 border border-slate-800 rounded-2xl">
-            <div className="w-8 h-8 rounded-full border-3 border-indigo-500/20 border-t-indigo-500 animate-spin mb-3" />
+            <div className="w-8 h-8 rounded-full border-3 border-violet-500/20 border-t-violet-500 animate-spin mb-3" />
             <p className="text-xs font-mono text-slate-500 animate-pulse">Sincronizando hoja...</p>
           </div>
         ) : (
@@ -1728,6 +1741,8 @@ export default function App() {
                   return (
                     <div 
                       key={col.id} 
+                      onMouseMove={handleColumnMouseMove3D}
+                      onMouseLeave={handleColumnMouseLeave3D}
                       style={{ 
                         backgroundColor: `${columnVibrantColor}18`, 
                         borderColor: `${columnVibrantColor}60`,
@@ -1748,7 +1763,7 @@ export default function App() {
                                 type="text"
                                 value={editColumnTitle}
                                 onChange={(e) => setEditColumnTitle(e.target.value)}
-                                className="bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 w-full"
+                                className="bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-violet-500 w-full"
                                 autoFocus
                                 required
                               />
@@ -1908,9 +1923,9 @@ export default function App() {
                             onClick={() => { if (soundEnabled) playPop(); setShowAddTask(true); }}
                             className="w-full py-2.5 bg-zinc-950/60 hover:bg-zinc-900 border border-dashed border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-zinc-200 transition-all rounded-xl flex items-center justify-center gap-1.5 cursor-pointer font-bold text-xs shadow-sm mb-1.5"
                           >
-                            <Plus className="w-4 h-4 text-indigo-400" />
+                            <Plus className="w-4 h-4 text-violet-400" />
                             <span>Agregar Pendiente</span>
-                            <kbd className="hidden md:inline-flex items-center px-1.5 py-0.5 text-[9px] font-sans font-medium text-indigo-400/80 bg-zinc-900 border border-zinc-800 rounded-md">
+                            <kbd className="hidden md:inline-flex items-center px-1.5 py-0.5 text-[9px] font-sans font-medium text-violet-400/80 bg-zinc-900 border border-zinc-800 rounded-md">
                               ⇧A
                             </kbd>
                           </button>
@@ -1958,7 +1973,7 @@ export default function App() {
                           value={newColumnTitle}
                           onChange={(e) => setNewColumnTitle(e.target.value)}
                           placeholder="Ej. Negociando, Cotizando..."
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500"
                           maxLength={25}
                           autoFocus
                           required
@@ -1968,7 +1983,7 @@ export default function App() {
                       <div className="flex gap-2">
                         <button
                           type="submit"
-                          className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold"
+                          className="flex-1 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-bold"
                         >
                           Crear Columna
                         </button>
@@ -2001,7 +2016,7 @@ export default function App() {
               <div className="bg-slate-900/40 border border-slate-800 p-5 rounded-2xl flex flex-col gap-5">
                 <div>
                   <h3 className="text-sm font-extrabold text-white mb-1 flex items-center gap-1.5">
-                    <TrendingUp className="w-4 h-4 text-indigo-400" />
+                    <TrendingUp className="w-4 h-4 text-violet-400" />
                     Rendimiento de Tareas
                   </h3>
                   <p className="text-[11px] text-slate-400">
@@ -2124,13 +2139,13 @@ export default function App() {
                 <div className="bg-zinc-950/40 p-4 rounded-xl border border-zinc-800">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-xs font-bold text-zinc-300">Eficiencia de la Hoja Activa</span>
-                    <span className="text-xs font-mono font-bold text-indigo-400">
+                    <span className="text-xs font-mono font-bold text-violet-400">
                       {totalTasks > 0 ? Math.round((completedTasksCount / totalTasks) * 100) : 0}% completado
                     </span>
                   </div>
                   <div className="w-full bg-zinc-900 h-2.5 rounded-full overflow-hidden">
                     <div 
-                      className="bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500 h-full rounded-full transition-all duration-700"
+                      className="bg-gradient-to-r from-violet-500 via-purple-500 to-emerald-500 h-full rounded-full transition-all duration-700"
                       style={{ width: `${totalTasks > 0 ? (completedTasksCount / totalTasks) * 100 : 0}%` }}
                     />
                   </div>
@@ -2158,7 +2173,7 @@ export default function App() {
                     return (
                       <div 
                         key={sheet.id}
-                        className={`p-3 rounded-xl border flex flex-col gap-1.5 transition-all ${sheet.id === activeSheetId ? 'bg-indigo-950/15 border-indigo-900/40' : 'bg-zinc-950/30 border-zinc-800'}`}
+                        className={`p-3 rounded-xl border flex flex-col gap-1.5 transition-all ${sheet.id === activeSheetId ? 'bg-violet-950/15 border-violet-900/40' : 'bg-zinc-950/30 border-zinc-800'}`}
                       >
                         <div className="flex justify-between items-center">
                           <span className="text-[10px] font-display tracking-widest uppercase font-extrabold text-zinc-200 truncate max-w-[150px]">
@@ -2179,7 +2194,7 @@ export default function App() {
                         <div className="flex items-center gap-2">
                           <div className="flex-1 bg-slate-900 h-1 rounded-full overflow-hidden">
                             <div 
-                              className={`h-full rounded-full ${isCompleted ? 'bg-amber-400' : 'bg-indigo-500'}`}
+                              className={`h-full rounded-full ${isCompleted ? 'bg-amber-400' : 'bg-violet-500'}`}
                               style={{ width: `${rate}%` }}
                             />
                           </div>
@@ -2230,7 +2245,7 @@ export default function App() {
                   type="text" 
                   value={editSheetTitle}
                   onChange={(e) => setEditSheetTitle(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500"
                   maxLength={20}
                   required
                 />
@@ -2247,7 +2262,7 @@ export default function App() {
               </button>
               <button 
                 type="submit"
-                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/10"
+                className="flex-1 py-2.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-violet-600/10"
               >
                 Guardar
               </button>
@@ -2269,7 +2284,7 @@ export default function App() {
             </button>
 
             <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-indigo-600/20 border border-indigo-500/30 rounded-xl shadow-[0_0_15px_rgba(99,102,241,0.15)] flex items-center justify-center text-indigo-400">
+              <div className="p-2 bg-violet-600/20 border border-violet-500/30 rounded-xl shadow-[0_0_15px_rgba(99,102,241,0.15)] flex items-center justify-center text-violet-400">
                 <Mic className="w-5 h-5" />
               </div>
               <div className="text-left">
@@ -2284,7 +2299,7 @@ export default function App() {
 
             {/* Glowing active micro visualizer */}
             <div className="flex flex-col items-center justify-center py-6 bg-zinc-950/40 border border-zinc-850/60 rounded-2xl relative overflow-hidden">
-              <div className="absolute inset-0 bg-radial-gradient from-indigo-600/5 to-transparent opacity-40 pointer-events-none" />
+              <div className="absolute inset-0 bg-radial-gradient from-violet-600/5 to-transparent opacity-40 pointer-events-none" />
               
               <button
                 type="button"
@@ -2295,7 +2310,7 @@ export default function App() {
                     ? 'bg-rose-600 shadow-[0_0_35px_rgba(225,29,72,0.65)] animate-pulse' 
                     : isVoiceProcessing
                       ? 'bg-zinc-800 opacity-50 cursor-not-allowed'
-                      : 'bg-indigo-600 hover:bg-indigo-500 shadow-[0_0_25px_rgba(99,102,241,0.4)]'
+                      : 'bg-violet-600 hover:bg-violet-500 shadow-[0_0_25px_rgba(99,102,241,0.4)]'
                 }`}
               >
                 {isListening ? (
@@ -2312,10 +2327,10 @@ export default function App() {
                   </span>
                 ) : isVoiceProcessing ? (
                   <div className="flex items-center gap-1.5 justify-center">
-                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '300ms' }} />
-                    <span className="text-xs font-mono text-indigo-400 font-bold">IA interpretando comandos...</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <span className="text-xs font-mono text-violet-400 font-bold">IA interpretando comandos...</span>
                   </div>
                 ) : (
                   <span className="text-xs font-mono text-zinc-400">
@@ -2329,8 +2344,8 @@ export default function App() {
             {voiceText && (
               <div className="bg-zinc-950 p-4 rounded-2xl border border-zinc-800/80 animate-fade-in flex flex-col gap-3 text-left">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                  <span className="text-[10px] font-mono font-bold text-violet-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-violet-400" />
                     Transcripción rápida
                   </span>
                   <span className="text-[9px] text-zinc-500 font-mono">Toca para editar si lo deseas</span>
@@ -2341,7 +2356,7 @@ export default function App() {
                   onChange={(e) => setVoiceText(e.target.value)}
                   placeholder="El comando de voz aparecerá aquí..."
                   rows={2}
-                  className="bg-zinc-900/60 border border-zinc-800/60 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-indigo-500/80 w-full min-h-[55px] font-medium leading-relaxed resize-none"
+                  className="bg-zinc-900/60 border border-zinc-800/60 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-violet-500/80 w-full min-h-[55px] font-medium leading-relaxed resize-none"
                 />
 
                 {!isVoiceProcessing && (
@@ -2386,7 +2401,7 @@ export default function App() {
           <div className="bg-zinc-900 border border-zinc-800 rounded-t-3xl sm:rounded-2xl w-full max-w-md max-h-[85vh] p-5 relative shadow-2xl animate-scale-up text-white flex flex-col gap-4">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2">
-                <div className="p-2 bg-indigo-600/20 text-indigo-400 rounded-xl">
+                <div className="p-2 bg-violet-600/20 text-violet-400 rounded-xl">
                   <Layers className="w-5 h-5" />
                 </div>
                 <div>
@@ -2420,12 +2435,12 @@ export default function App() {
                     }}
                     className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
                       isActive 
-                        ? 'bg-indigo-600/20 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.2)]' 
+                        ? 'bg-violet-600/20 border-violet-500 shadow-[0_0_15px_rgba(99,102,241,0.2)]' 
                         : 'bg-zinc-950/70 border-zinc-800 hover:border-zinc-700'
                     }`}
                   >
                     <div className="flex items-center gap-3 truncate">
-                      <span className="text-2xl">{sheet.emoji || '🎯'}</span>
+                      <Layers className="w-5 h-5 text-violet-400 shrink-0" />
                       <div className="truncate">
                         <div className="flex items-center gap-2">
                           <span className={`text-sm font-bold truncate ${isActive ? 'text-white' : 'text-zinc-200'}`}>
@@ -2433,7 +2448,7 @@ export default function App() {
                           </span>
                           {isCompleted && (
                             <span className="text-[9px] font-bold text-amber-400 bg-amber-950/60 border border-amber-500/30 px-1.5 py-0.5 rounded">
-                              Completada 🏆
+                              Completada
                             </span>
                           )}
                         </div>
@@ -2449,7 +2464,6 @@ export default function App() {
                           if (soundEnabled) playPop();
                           setEditingSheet(sheet);
                           setEditSheetTitle(sheet.title);
-                          setEditSheetEmoji(sheet.emoji);
                           setShowMobileSheetsDrawer(false);
                         }}
                         className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white"
@@ -2483,7 +2497,7 @@ export default function App() {
                   setShowMobileSheetsDrawer(false);
                   setShowAddSheetInput(true);
                 }}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-indigo-600/20"
+                className="w-full py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-violet-600/20"
               >
                 <Plus className="w-4 h-4" />
                 <span>Crear Nueva Hoja</span>
@@ -2519,7 +2533,7 @@ export default function App() {
                   value={editTaskTitle}
                   onChange={(e) => setEditTaskTitle(e.target.value)}
                   maxLength={150}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 placeholder:text-zinc-650"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 placeholder:text-zinc-650"
                   required
                 />
               </div>
@@ -2533,7 +2547,7 @@ export default function App() {
                   onChange={(e) => setEditTaskDesc(e.target.value)}
                   maxLength={1000}
                   rows={4}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 resize-none placeholder:text-zinc-650"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 resize-none placeholder:text-zinc-650"
                 />
               </div>
             </div>
@@ -2548,7 +2562,7 @@ export default function App() {
               </button>
               <button 
                 type="submit"
-                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg"
+                className="flex-1 py-2.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold rounded-xl shadow-lg"
               >
                 Guardar Cambios
               </button>
@@ -2593,7 +2607,7 @@ export default function App() {
                   value={taskTitle}
                   onChange={(e) => setTaskTitle(e.target.value)}
                   maxLength={150}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 placeholder:text-zinc-600"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 placeholder:text-zinc-600"
                   placeholder="Ej. Comprar materiales..."
                   required
                 />
@@ -2608,7 +2622,7 @@ export default function App() {
                   onChange={(e) => setTaskDesc(e.target.value)}
                   maxLength={1000}
                   rows={3}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 placeholder:text-zinc-650 resize-none"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 placeholder:text-zinc-650 resize-none"
                   placeholder="Detalles sobre la tarea..."
                 />
               </div>
@@ -2624,7 +2638,7 @@ export default function App() {
               </button>
               <button 
                 type="submit"
-                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/10 cursor-pointer"
+                className="flex-1 py-2.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-violet-600/10 cursor-pointer"
               >
                 Crear
               </button>
@@ -2645,7 +2659,7 @@ export default function App() {
       {/* MOBILE FLOATING ADD BUTTON */}
       <button
         onClick={() => { if (soundEnabled) playPop(); setShowAddTask(true); }}
-        className="fixed bottom-6 right-6 z-40 md:hidden flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-full shadow-[0_4px_20px_rgba(99,102,241,0.4)] hover:shadow-[0_6px_25px_rgba(99,102,241,0.6)] cursor-pointer transition-all active:scale-95 animate-pulse animate-float-slow"
+        className="fixed bottom-6 right-6 z-40 md:hidden flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-violet-600 via-violet-500 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white rounded-full shadow-[0_4px_20px_rgba(99,102,241,0.4)] hover:shadow-[0_6px_25px_rgba(99,102,241,0.6)] cursor-pointer transition-all active:scale-95 animate-pulse animate-float-slow"
         title="Agregar nuevo pendiente"
       >
         <Plus className="w-7 h-7" />
@@ -2654,7 +2668,7 @@ export default function App() {
       {/* MOBILE FLOATING VOICE ASSISTANT BUTTON (OPPOSITE CORNER) */}
       <button
         onClick={() => { if (soundEnabled) playPop(); setIsVoiceAssistantOpen(true); }}
-        className="fixed bottom-6 left-6 z-40 md:hidden flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-full shadow-[0_4px_20px_rgba(99,102,241,0.4)] hover:shadow-[0_6px_25px_rgba(99,102,241,0.6)] cursor-pointer transition-all active:scale-95 animate-pulse animate-float-slow"
+        className="fixed bottom-6 left-6 z-40 md:hidden flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-violet-600 via-violet-500 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white rounded-full shadow-[0_4px_20px_rgba(99,102,241,0.4)] hover:shadow-[0_6px_25px_rgba(99,102,241,0.6)] cursor-pointer transition-all active:scale-95 animate-pulse animate-float-slow"
         title="Asistente de Voz IA"
       >
         <Mic className="w-6 h-6 animate-pulse" />
@@ -2718,9 +2732,18 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit }: TaskCardPro
       onMouseMove={(e) => handleMove(e.clientX)}
       onMouseUp={handleEnd}
       onMouseLeave={handleEnd}
-      onTouchStart={(e) => { if (e.touches.length > 0) handleStart(e.touches[0].clientX); }}
-      onTouchMove={(e) => { if (e.touches.length > 0) handleMove(e.touches[0].clientX); }}
-      onTouchEnd={handleEnd}
+      onTouchStart={(e) => { 
+        if (window.innerWidth < 768) return; // Disable touch-sliding completely on mobile!
+        if (e.touches.length > 0) handleStart(e.touches[0].clientX); 
+      }}
+      onTouchMove={(e) => { 
+        if (window.innerWidth < 768) return; // Disable touch-sliding completely on mobile!
+        if (e.touches.length > 0) handleMove(e.touches[0].clientX); 
+      }}
+      onTouchEnd={() => {
+        if (window.innerWidth < 768) return; // Disable touch-sliding completely on mobile!
+        handleEnd();
+      }}
       style={{
         transform: `translateX(${dragOffset}px) rotate(${dragOffset * 0.04}deg)`,
         transition: isDraggingCard.current ? 'none' : 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
@@ -2761,7 +2784,7 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit }: TaskCardPro
         {/* Edit task pencil */}
         <button
           onClick={onEdit}
-          className="p-1 text-slate-500 hover:text-indigo-400 hover:bg-indigo-950/30 rounded transition-all cursor-pointer"
+          className="p-1 text-slate-500 hover:text-violet-400 hover:bg-violet-950/30 rounded transition-all cursor-pointer"
           title="Editar pendiente"
         >
           <Pencil className="w-3.5 h-3.5" />
@@ -2791,7 +2814,7 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit }: TaskCardPro
         {currentIndex < activeColumns.length - 1 && (
           <button
             onClick={() => onMove(task, 'right')}
-            className="p-1 text-white bg-indigo-600 hover:bg-indigo-500 rounded transition-all flex items-center gap-0.5 cursor-pointer"
+            className="p-1 text-white bg-violet-600 hover:bg-violet-500 rounded transition-all flex items-center gap-0.5 cursor-pointer"
             title={currentIndex === activeColumns.length - 2 ? "Completar" : "Avanzar"}
           >
             <span className="text-[9px] font-bold px-0.5">
@@ -2834,7 +2857,7 @@ function InteractiveCongrats3D({ taskTitle, points, onClose }: InteractiveCongra
   useEffect(() => {
     const pList: Particle3D[] = [];
     const colors = [
-      '#6366f1', // Indigo
+      '#6366f1', // Violet
       '#a855f7', // Purple
       '#ec4899', // Pink
       '#10b981', // Emerald
@@ -3048,7 +3071,7 @@ function InteractiveCongrats3D({ taskTitle, points, onClose }: InteractiveCongra
       />
 
       <div className="relative bg-slate-900/80 backdrop-blur-md border border-emerald-500/30 p-8 rounded-3xl w-full max-w-md text-center shadow-2xl flex flex-col items-center gap-6 pointer-events-auto">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-indigo-500 flex items-center justify-center shadow-xl shadow-emerald-500/25 animate-bounce">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-violet-500 flex items-center justify-center shadow-xl shadow-emerald-500/25 animate-bounce">
           <Award className="w-8 h-8 text-white" />
         </div>
 
@@ -3167,7 +3190,7 @@ function SheetTab({
             onSelect();
           }
         }}
-        className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-t-xl transition-all border-t border-x cursor-pointer whitespace-nowrap ${isActive ? 'bg-[#0c0c0e] border-zinc-800 text-indigo-400 font-bold -mb-px shadow-[0_-4px_12px_rgba(0,0,0,0.3)]' : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'}`}
+        className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-t-xl transition-all border-t border-x cursor-pointer whitespace-nowrap ${isActive ? 'bg-[#0c0c0e] border-zinc-800 text-violet-400 font-bold -mb-px shadow-[0_-4px_12px_rgba(0,0,0,0.3)]' : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'}`}
       >
         <span className="font-sans font-semibold text-xs sm:text-sm">{sheet.title}</span>
 
@@ -3182,7 +3205,7 @@ function SheetTab({
               e.stopPropagation();
               onEdit();
             }}
-            className="ml-1 p-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-indigo-400 transition-colors shrink-0 cursor-pointer"
+            className="ml-1 p-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-violet-400 transition-colors shrink-0 cursor-pointer"
             title="Editar nombre de esta hoja"
           >
             <Pencil className="w-3 h-3" />

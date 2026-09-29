@@ -6,6 +6,11 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
+body {
+  background-color: #000000;
+  color: #ffffff;
+}
+
 /* Custom gorgeous animations */
 @keyframes pulse-ring {
   0% {
