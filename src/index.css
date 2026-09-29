@@ -153,3 +153,15 @@ body {
 .sheet-tabs-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 159, 10, 0.75) !important;
 }
+
+@keyframes neon-glow-vibrant {
+  0% { border-color: #FF9F0A; box-shadow: 0 0 25px rgba(255, 159, 10, 0.4); }
+  33% { border-color: #30D158; box-shadow: 0 0 25px rgba(48, 209, 88, 0.4); }
+  66% { border-color: #64D2FF; box-shadow: 0 0 25px rgba(100, 210, 255, 0.4); }
+  100% { border-color: #FF9F0A; box-shadow: 0 0 25px rgba(255, 159, 10, 0.4); }
+}
+
+.animate-neon-glow-vibrant {
+  animation: neon-glow-vibrant 6s linear infinite;
+}
+

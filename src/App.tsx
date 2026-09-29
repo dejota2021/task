@@ -51,7 +51,7 @@ import {
   Redo2
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from './firebase';
-import { playPop, playWoosh, playSuccess, playFanfare } from './sound';
+import { playPop, playWoosh, playSuccess, playFanfare, playMegaCelebration } from './sound';
 
 // Column Interface (Fully Dynamic!)
 interface KanbanColumn {
@@ -215,13 +215,17 @@ interface Particle3D {
   vz: number;
   color: string;
   size: number;
-  type: 'cube' | 'star' | 'diamond' | 'sphere';
+  type: 'cube' | 'star' | 'diamond' | 'sphere' | 'emoji';
   rotX: number;
   rotY: number;
   rotZ: number;
   rotSpeedX: number;
   rotSpeedY: number;
   rotSpeedZ: number;
+  alpha?: number;
+  life?: number;
+  maxLife?: number;
+  emoji?: string;
 }
 
 // Default columns set used if not configured in the Firestore board doc
@@ -243,6 +247,7 @@ export default function App() {
 
   // Tasks in active sheet
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOfflineFallback, setIsOfflineFallback] = useState(false);
 
@@ -419,11 +424,31 @@ export default function App() {
         e.preventDefault();
         handleRedo();
       }
+
+      // Shortcut [ArrowLeft] to switch sheets
+      if (e.key === 'ArrowLeft' && !isTyping) {
+        e.preventDefault();
+        const curIdx = sheets.findIndex(s => s.id === activeSheetId);
+        if (curIdx > 0) {
+          if (soundEnabled) playWoosh();
+          setActiveSheetId(sheets[curIdx - 1].id);
+        }
+      }
+
+      // Shortcut [ArrowRight] to switch sheets
+      if (e.key === 'ArrowRight' && !isTyping) {
+        e.preventDefault();
+        const curIdx = sheets.findIndex(s => s.id === activeSheetId);
+        if (curIdx < sheets.length - 1) {
+          if (soundEnabled) playWoosh();
+          setActiveSheetId(sheets[curIdx + 1].id);
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [soundEnabled]);
+  }, [soundEnabled, sheets, activeSheetId]);
 
   // Update slide transition direction based on tab index movement
   useEffect(() => {
@@ -1007,6 +1032,29 @@ export default function App() {
     el.style.transition = 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)';
   };
 
+  const handleGeneric3DMouseMove = (e: React.MouseEvent<HTMLElement>) => {
+    if (window.innerWidth < 1024) return;
+    const el = e.currentTarget;
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const xc = rect.width / 2;
+    const yc = rect.height / 2;
+    const rotateY = ((x - xc) / xc) * 25;
+    const rotateX = -((y - yc) / yc) * 25;
+    
+    el.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.025, 1.025, 1.025)`;
+    el.style.boxShadow = '0 30px 65px rgba(0, 0, 0, 0.65)';
+    el.style.transition = 'transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1)';
+  };
+
+  const handleGeneric3DMouseLeave = (e: React.MouseEvent<HTMLElement>) => {
+    const el = e.currentTarget;
+    el.style.transform = '';
+    el.style.boxShadow = '';
+    el.style.transition = 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)';
+  };
+
   // Reorganize sheet position (swap with neighbor and update order)
   const handleMoveSheet = async (sheetId: string, direction: 'left' | 'right') => {
     const currentIndex = sheets.findIndex(s => s.id === sheetId);
@@ -1260,7 +1308,7 @@ export default function App() {
     localStorage.setItem(`sincrotask_tasks_backup_${activeSheetId}`, JSON.stringify(updatedTasks));
 
     if (newColumnId === lastColId) {
-      if (soundEnabled) playSuccess();
+      if (soundEnabled) playMegaCelebration();
       setCelebrationTask({
         title: task.title,
         points: 1
@@ -1354,6 +1402,51 @@ export default function App() {
       console.warn("Firebase task delete failed, switched to local storage:", err);
       setIsOfflineFallback(true);
       handleFirestoreError(err, OperationType.DELETE, `boards/${activeSheetId}/tasks/${task.id}`);
+    }
+  };
+
+  const handleDeleteSelectedTasks = async () => {
+    if (selectedTaskIds.length === 0) return;
+    if (soundEnabled) playPop();
+
+    const tasksToDelete = tasks.filter(t => selectedTaskIds.includes(t.id));
+    const updatedTasks = tasks.filter(t => !selectedTaskIds.includes(t.id));
+    
+    setTasks(updatedTasks);
+    localStorage.setItem(`sincrotask_tasks_backup_${activeSheetId}`, JSON.stringify(updatedTasks));
+    setSelectedTaskIds([]);
+
+    pushAction(
+      `Eliminar ${tasksToDelete.length} tareas`,
+      async () => {
+        for (const task of tasksToDelete) {
+          const ref = doc(db, 'boards', activeSheetId, 'tasks', task.id);
+          await setDoc(ref, {
+            title: task.title,
+            description: task.description || '',
+            column: task.column,
+            points: 1,
+            createdAt: task.createdAt instanceof Date ? task.createdAt : new Date(task.createdAt)
+          });
+        }
+      },
+      async () => {
+        for (const task of tasksToDelete) {
+          const ref = doc(db, 'boards', activeSheetId, 'tasks', task.id);
+          await deleteDoc(ref);
+        }
+      }
+    );
+
+    if (isOfflineFallback) return;
+
+    try {
+      for (const task of tasksToDelete) {
+        const ref = doc(db, 'boards', activeSheetId, 'tasks', task.id);
+        await deleteDoc(ref);
+      }
+    } catch (err) {
+      console.warn("Error deleting multiple tasks online:", err);
     }
   };
 
@@ -1544,7 +1637,11 @@ export default function App() {
       <header className="border-b border-[#22242a] bg-[#0c0d0f]/95 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3 column-3d-container">
           
-          <div className="flex items-center gap-2.5">
+          <div 
+            onMouseMove={handleGeneric3DMouseMove}
+            onMouseLeave={handleGeneric3DMouseLeave}
+            className="flex items-center gap-2.5 column-3d-container px-2 py-1 rounded-xl cursor-pointer"
+          >
             <div className="p-2 bg-[#FF9F0A]/15 border border-[#FF9F0A]/30 rounded-xl shadow-[0_0_15px_rgba(255,159,10,0.2)] flex items-center justify-center transition-all duration-300 hover:border-[#FF9F0A]/50">
               <ListTodo className="w-5 h-5 text-[#FF9F0A] filter drop-shadow-[0_0_4px_rgba(255,159,10,0.5)] cursor-pointer" />
             </div>
@@ -1664,11 +1761,19 @@ export default function App() {
         ) : (
           <>
             {/* Gamification Banner & Stat Indicators (Modeled after reference dark UI) */}
-            <div className="bg-[#18191c] p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-[#26282e] shadow-xl column-3d-container">
+            <div 
+              onMouseMove={handleGeneric3DMouseMove}
+              onMouseLeave={handleGeneric3DMouseLeave}
+              className="bg-[#18191c] p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-[#26282e] shadow-xl column-3d-container"
+            >
               <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
                 
                 {/* Stat 1: Mayor Rendimiento / XP */}
-                <div className="bg-[#121315] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-[#222428] flex flex-col justify-between">
+                <div 
+                  onMouseMove={handleGeneric3DMouseMove}
+                  onMouseLeave={handleGeneric3DMouseLeave}
+                  className="bg-[#121315] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-[#222428] flex flex-col justify-between column-3d-container cursor-pointer"
+                >
                   <div className="text-[9px] sm:text-[10px] text-zinc-400 font-bold uppercase tracking-wider truncate">
                     XP Total
                   </div>
@@ -1681,7 +1786,11 @@ export default function App() {
                 </div>
 
                 {/* Stat 2: Tasa de Eficiencia */}
-                <div className="bg-[#121315] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-[#222428] flex flex-col justify-between">
+                <div 
+                  onMouseMove={handleGeneric3DMouseMove}
+                  onMouseLeave={handleGeneric3DMouseLeave}
+                  className="bg-[#121315] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-[#222428] flex flex-col justify-between column-3d-container cursor-pointer"
+                >
                   <div className="text-[9px] sm:text-[10px] text-zinc-400 font-bold uppercase tracking-wider truncate">
                     Efectividad
                   </div>
@@ -1694,7 +1803,11 @@ export default function App() {
                 </div>
 
                 {/* Stat 3: Movimientos con Tareas */}
-                <div className="bg-[#121315] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-[#222428] flex flex-col justify-between">
+                <div 
+                  onMouseMove={handleGeneric3DMouseMove}
+                  onMouseLeave={handleGeneric3DMouseLeave}
+                  className="bg-[#121315] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-[#222428] flex flex-col justify-between column-3d-container cursor-pointer"
+                >
                   <div className="text-[9px] sm:text-[10px] text-zinc-400 font-bold uppercase tracking-wider truncate">
                     Tareas Activas
                   </div>
@@ -2101,6 +2214,15 @@ export default function App() {
                                 setEditTaskTitle(task.title);
                                 setEditTaskDesc(task.description);
                               }}
+                              isSelected={selectedTaskIds.includes(task.id)}
+                              onToggleSelect={() => {
+                                if (soundEnabled) playPop();
+                                setSelectedTaskIds(prev => 
+                                  prev.includes(task.id) 
+                                    ? prev.filter(id => id !== task.id) 
+                                    : [...prev, task.id]
+                                );
+                              }}
                             />
                           ))
                         )}
@@ -2385,7 +2507,11 @@ export default function App() {
       </main>
 
       {/* FOOTER */}
-      <footer className="border-t border-slate-900 py-5 bg-[#05070e] text-center mt-10">
+      <footer 
+        onMouseMove={handleGeneric3DMouseMove}
+        onMouseLeave={handleGeneric3DMouseLeave}
+        className="border-t border-slate-900 py-5 bg-[#05070e] text-center mt-10 column-3d-container cursor-pointer"
+      >
         <p className="text-slate-600 text-[10px] font-mono">
           TaskPro · Optimizado para mobile y escritorio
         </p>
@@ -2827,41 +2953,6 @@ export default function App() {
         />
       )}
 
-      {/* REAL-TIME NOTIFICATION TOAST BANNER (Matching IMG_0128.png) */}
-      {showSyncToast && (
-        <div className="fixed bottom-20 md:bottom-6 left-4 right-4 max-w-lg mx-auto z-40 animate-slide-up">
-          <div className="bg-[#121315]/95 border border-[#2e3138] backdrop-blur-xl p-3.5 sm:p-4 rounded-3xl shadow-[0_15px_40px_rgba(0,0,0,0.8)] flex items-start justify-between gap-3 text-white">
-            <div className="flex items-start gap-3 min-w-0">
-              <div className="p-2.5 bg-[#FF9F0A] text-black rounded-2xl shrink-0 shadow-md shadow-[#FF9F0A]/20">
-                <Bell className="w-5 h-5 fill-black stroke-none" />
-              </div>
-              <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="text-[10px] font-mono font-black text-[#FF9F0A] uppercase tracking-wider">
-                  NOTIFICACIÓN EN TIEMPO REAL
-                </span>
-                <p className="text-xs font-bold text-zinc-100 truncate">
-                  {syncToastMessage}
-                </p>
-                <div className="flex items-center gap-3 mt-1 text-[10px] text-zinc-500 font-mono">
-                  <span>07:13 a.m.</span>
-                  <span className="flex items-center gap-1 text-[#30D158] font-bold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#30D158] animate-ping" />
-                    Sincronizado
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setShowSyncToast(false)}
-              className="p-1 rounded-lg text-zinc-500 hover:text-white hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* MOBILE FLOATING ADD BUTTON (Bottom Right - Matching previous layout and IMG_0129.png) */}
       <button
         onClick={() => { if (soundEnabled) playPop(); setShowAddTask(true); }}
@@ -2891,9 +2982,11 @@ interface TaskCardProps {
   onMove: (task: Task, direction: 'left' | 'right') => void;
   onDelete: (task: Task) => void;
   onEdit: () => void;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
 }
 
-function TaskCard({ task, activeColumns, onMove, onDelete, onEdit }: TaskCardProps) {
+function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isSelected, onToggleSelect }: TaskCardProps) {
   const currentIndex = activeColumns.findIndex(c => c.id === task.column);
   const lastColId = activeColumns[activeColumns.length - 1]?.id || 'done';
 
@@ -2974,18 +3067,16 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit }: TaskCardPro
         transform: `translateX(${dragOffset}px) rotate(${dragOffset * 0.04}deg) perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
         transition: isDraggingCard.current ? 'none' : 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
         cursor: isDraggingCard.current ? 'grabbing' : 'grab',
-        borderColor: `${cardVibrantColor}B5`,
-        backgroundColor: `${cardVibrantColor}35`,
-        boxShadow: `0 12px 30px -4px ${cardVibrantColor}70, inset 0 0 20px ${cardVibrantColor}25, 0 0 15px ${cardVibrantColor}1F`
+        borderColor: isSelected ? '#ff375f' : `${cardVibrantColor}B5`,
+        backgroundColor: isSelected ? 'rgba(255, 55, 95, 0.2)' : `${cardVibrantColor}35`,
+        boxShadow: isSelected 
+          ? `0 12px 30px -4px rgba(255, 55, 95, 0.45), inset 0 0 20px rgba(255, 55, 95, 0.25), 0 0 15px rgba(255, 55, 95, 0.2)`
+          : `0 12px 30px -4px ${cardVibrantColor}70, inset 0 0 20px ${cardVibrantColor}25, 0 0 15px ${cardVibrantColor}1F`
       }}
       className="task-card-3d p-4 rounded-xl border hover:border-white/80 shadow-md transform group flex flex-col gap-3 relative select-none touch-none min-h-[110px] h-auto flex-shrink-0"
     >
       
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-[9px] uppercase font-bold font-mono tracking-wider" style={{ color: cardVibrantColor }}>
-          <CircleDot className="w-3.5 h-3.5" style={{ color: cardVibrantColor }} />
-          <span>Pendiente</span>
-        </div>
+      <div className="flex items-center justify-end">
         {task.column === lastColId && (
           <span className="text-[9px] font-mono font-bold text-amber-300 bg-amber-950/60 border border-amber-500/30 px-1.5 py-0.5 rounded">
             +1 XP
@@ -3062,7 +3153,7 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit }: TaskCardPro
   );
 }
 
-// 3D Canvas Celebration Component (Projection Matrix + Particle Physics Engine)
+/// 3D Canvas Celebration Component (Projection Matrix + Particle Physics Engine)
 interface InteractiveCongrats3DProps {
   taskTitle: string;
   points: number;
@@ -3082,37 +3173,36 @@ function InteractiveCongrats3D({ taskTitle, points, onClose }: InteractiveCongra
 
   useEffect(() => {
     const pList: Particle3D[] = [];
-    const colors = [
-      '#6366f1', // Violet
-      '#a855f7', // Purple
-      '#ec4899', // Pink
-      '#10b981', // Emerald
-      '#f59e0b', // Amber
-      '#06b6d4'  // Cyan
-    ];
-    const types: ('cube' | 'star' | 'diamond' | 'sphere')[] = ['cube', 'star', 'diamond', 'sphere'];
+    const colors = ['#FF9F0A', '#30D158', '#64D2FF', '#BF5AF2', '#FF375F', '#FFD60A'];
+    const types: ('cube' | 'star' | 'diamond' | 'sphere' | 'emoji')[] = ['cube', 'star', 'diamond', 'sphere', 'emoji'];
+    const emojis = ['🎉', '✨', '🌟', '🏆', '👏', '🥳', '🔥', '🎯'];
 
-    for (let i = 0; i < 90; i++) {
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos((Math.random() * 2) - 1);
-      const dist = 50 + Math.random() * 180;
+    // Big initial colorful burst
+    for (let i = 0; i < 160; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1 + Math.random() * 9;
+      const zDepth = (Math.random() - 0.5) * 200;
 
       pList.push({
-        x: dist * Math.sin(phi) * Math.cos(theta),
-        y: dist * Math.sin(phi) * Math.sin(theta),
-        z: dist * Math.cos(phi),
-        vx: (Math.random() - 0.5) * 1.5,
-        vy: (Math.random() - 0.5) * 1.5,
-        vz: (Math.random() - 0.5) * 1.5,
+        x: (Math.random() - 0.5) * 40,
+        y: (Math.random() - 0.5) * 40,
+        z: zDepth,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 3, // Initial upward burst bias
+        vz: (Math.random() - 0.5) * 3,
         color: colors[Math.floor(Math.random() * colors.length)],
-        size: 5 + Math.random() * 12,
+        size: 7 + Math.random() * 15,
         type: types[Math.floor(Math.random() * types.length)],
         rotX: Math.random() * Math.PI,
         rotY: Math.random() * Math.PI,
         rotZ: Math.random() * Math.PI,
-        rotSpeedX: (Math.random() - 0.5) * 0.05,
-        rotSpeedY: (Math.random() - 0.5) * 0.05,
-        rotSpeedZ: (Math.random() - 0.5) * 0.05
+        rotSpeedX: (Math.random() - 0.5) * 0.08,
+        rotSpeedY: (Math.random() - 0.5) * 0.08,
+        rotSpeedZ: (Math.random() - 0.5) * 0.08,
+        alpha: 1.0,
+        life: 0,
+        maxLife: 90 + Math.random() * 110,
+        emoji: emojis[Math.floor(Math.random() * emojis.length)]
       });
     }
     particles.current = pList;
@@ -3134,7 +3224,7 @@ function InteractiveCongrats3D({ taskTitle, points, onClose }: InteractiveCongra
     const focalLength = 350;
 
     const render = () => {
-      ctx.fillStyle = 'rgba(7, 11, 20, 0.25)';
+      ctx.fillStyle = 'rgba(5, 6, 12, 0.22)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       const cx = canvas.width / 2;
@@ -3146,15 +3236,34 @@ function InteractiveCongrats3D({ taskTitle, points, onClose }: InteractiveCongra
       const sinX = Math.sin(angleX.current);
 
       particles.current.forEach((p) => {
+        // Apply physics
         p.x += p.vx;
         p.y += p.vy;
         p.z += p.vz;
+        p.vy += 0.09; // Gravity pull
+        p.vx *= 0.985; // Air drag
+        p.vy *= 0.985;
 
-        const d = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
-        if (d > 250) {
-          p.vx *= -1;
-          p.vy *= -1;
-          p.vz *= -1;
+        p.life = (p.life || 0) + 1;
+        const remainingRatio = Math.max(0, 1 - p.life / (p.maxLife || 100));
+        p.alpha = remainingRatio;
+
+        // Reset particle to loop if dead
+        if (p.life >= (p.maxLife || 100)) {
+          const colors = ['#FF9F0A', '#30D158', '#64D2FF', '#BF5AF2', '#FF375F', '#FFD60A'];
+          const types: ('cube' | 'star' | 'diamond' | 'sphere' | 'emoji')[] = ['cube', 'star', 'diamond', 'sphere', 'emoji'];
+          const emojis = ['🎉', '✨', '🌟', '🏆', '👏', '🥳', '🔥', '🎯'];
+          p.x = (Math.random() - 0.5) * (canvas.width * 0.8);
+          p.y = canvas.height + 20;
+          p.z = (Math.random() - 0.5) * 120;
+          p.vx = (Math.random() - 0.5) * 4;
+          p.vy = -5 - Math.random() * 7; // Shoot up spectacularly
+          p.vz = (Math.random() - 0.5) * 2;
+          p.life = 0;
+          p.maxLife = 70 + Math.random() * 90;
+          p.color = colors[Math.floor(Math.random() * colors.length)];
+          p.type = types[Math.floor(Math.random() * types.length)];
+          p.emoji = emojis[Math.floor(Math.random() * emojis.length)];
         }
 
         let x1 = p.x * cosY - p.z * sinY;
@@ -3171,7 +3280,7 @@ function InteractiveCongrats3D({ taskTitle, points, onClose }: InteractiveCongra
         const projY = cy + y2 * scale;
 
         if (z2 + focalLength > 10 && projX > 0 && projX < canvas.width && projY > 0 && projY < canvas.height) {
-          const opacity = Math.min(1, Math.max(0.15, (focalLength - z2) / (focalLength * 1.5)));
+          const opacity = Math.min(1, Math.max(0.15, (focalLength - z2) / (focalLength * 1.5))) * (p.alpha || 1.0);
           ctx.strokeStyle = p.color;
           ctx.fillStyle = p.color;
           ctx.lineWidth = 1.5;
@@ -3181,7 +3290,11 @@ function InteractiveCongrats3D({ taskTitle, points, onClose }: InteractiveCongra
           ctx.scale(scale, scale);
           ctx.rotate(p.rotZ);
 
-          if (p.type === 'cube') {
+          if (p.type === 'emoji' && p.emoji) {
+            ctx.globalAlpha = opacity;
+            ctx.font = `${p.size * 2}px sans-serif`;
+            ctx.fillText(p.emoji, -p.size, p.size / 2);
+          } else if (p.type === 'cube') {
             const sz = p.size;
             ctx.globalAlpha = opacity * 0.4;
             ctx.fillRect(-sz/2, -sz/2, sz, sz);
@@ -3282,7 +3395,7 @@ function InteractiveCongrats3D({ taskTitle, points, onClose }: InteractiveCongra
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 overflow-hidden select-none bg-[#03060c]/90"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 overflow-hidden select-none bg-gradient-to-tr from-[#060410]/95 via-[#040810]/95 to-[#030e06]/95"
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -3296,36 +3409,37 @@ function InteractiveCongrats3D({ taskTitle, points, onClose }: InteractiveCongra
         className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing block"
       />
 
-      <div className="relative bg-slate-900/80 backdrop-blur-md border border-emerald-500/30 p-8 rounded-3xl w-full max-w-md text-center shadow-2xl flex flex-col items-center gap-6 pointer-events-auto">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-amber-500 flex items-center justify-center shadow-xl shadow-emerald-500/25 animate-bounce">
-          <Award className="w-8 h-8 text-white" />
+      <div className="relative bg-[#0c0d12]/95 backdrop-blur-xl border-2 border-dashed rounded-3xl p-8 w-full max-w-sm text-center shadow-2xl flex flex-col items-center gap-6 pointer-events-auto animate-scale-up animate-neon-glow-vibrant">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500 via-[#30D158] to-emerald-500 flex items-center justify-center shadow-xl shadow-emerald-550/25 animate-bounce">
+          <Award className="w-8 h-8 text-white filter drop-shadow-[0_0_8px_rgba(255,255,255,0.6)]" />
         </div>
 
         <div>
-          <span className="text-[10px] font-mono font-bold tracking-widest text-emerald-400 uppercase bg-emerald-950/50 border border-emerald-800/30 px-3 py-1 rounded-full">
+          <span className="text-[10px] font-mono font-black tracking-widest text-[#FF9F0A] uppercase bg-[#FF9F0A]/15 border border-[#FF9F0A]/40 px-3 py-1.5 rounded-full shadow-[0_0_12px_rgba(255,159,10,0.25)] animate-pulse">
             ¡Completado con Éxito!
           </span>
           <h2 className="text-2xl font-display font-extrabold text-white mt-4 tracking-tight leading-tight">
             ¡Excelente Trabajo!
           </h2>
-          <p className="text-slate-400 text-xs mt-2 font-mono max-w-sm truncate" title={taskTitle}>
+          <p className="text-zinc-300 text-xs mt-2 font-mono max-w-xs truncate font-bold" title={taskTitle}>
             "{taskTitle}"
           </p>
         </div>
 
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl px-6 py-4 flex flex-col items-center justify-center gap-1 w-full">
-          <div className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">Premio Obtenido</div>
-          <div className="text-3xl font-mono font-extrabold text-amber-300">+1 XP</div>
-          <div className="text-[10px] text-slate-400">Punto agregado a la hoja</div>
+        <div className="bg-gradient-to-tr from-[#121315] to-[#1a1b20] border border-white/10 rounded-2xl px-6 py-4 flex flex-col items-center justify-center gap-1 w-full shadow-inner relative overflow-hidden">
+          <div className="absolute inset-0 bg-radial-gradient from-[#30D158]/5 to-transparent opacity-30" />
+          <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Premio Obtenido</div>
+          <div className="text-3xl font-mono font-black text-[#30D158] drop-shadow-[0_0_10px_rgba(48,209,88,0.4)]">+1 XP</div>
+          <div className="text-[10px] text-zinc-500 font-medium">Punto agregado a la hoja</div>
         </div>
 
-        <p className="text-[10px] text-slate-500 italic">
-          Tip: ¡Desliza el dedo en la pantalla para girar las estrellas 3D en el espacio!
+        <p className="text-[9px] text-zinc-400 leading-normal bg-zinc-950/60 p-2 rounded-lg border border-zinc-800/40">
+          Tip: ¡Desliza el dedo o el ratón en la pantalla para girar y agitar los fuegos artificiales en el espacio 3D!
         </p>
 
         <button 
           onClick={onClose}
-          className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold text-sm rounded-xl transition-all shadow-lg shadow-emerald-600/25 cursor-pointer"
+          className="w-full py-3.5 bg-gradient-to-r from-[#FF9F0A] to-amber-500 hover:from-amber-500 hover:to-[#FFB340] text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-amber-500/20 cursor-pointer active:scale-[0.98]"
         >
           Continuar
         </button>

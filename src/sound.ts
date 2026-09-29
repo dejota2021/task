@@ -134,3 +134,42 @@ export function playFanfare() {
     osc.stop(now + step.start + dur);
   });
 }
+
+/**
+ * Play a mega celebration sound (fireworks/payout cascade)
+ */
+export function playMegaCelebration() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  const now = ctx.currentTime;
+  
+  const notes = [
+    261.63, 329.63, 392.00, 523.25, // C4, E4, G4, C5
+    392.00, 523.25, 659.25, 783.99, // G4, C5, E5, G5
+    523.25, 659.25, 783.99, 1046.50, // C5, E5, G5, C6
+    783.99, 1046.50, 1318.51, 1567.98, // G5, C6, E6, G6
+    2093.00 // C7 (Grand finale!)
+  ];
+
+  notes.forEach((freq, idx) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+    
+    osc.frequency.setValueAtTime(freq, now + idx * 0.04);
+    osc.frequency.exponentialRampToValueAtTime(freq * 1.05, now + idx * 0.04 + 0.12);
+
+    gain.gain.setValueAtTime(0.0, now + idx * 0.04);
+    gain.gain.linearRampToValueAtTime(0.04, now + idx * 0.04 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.04 + 0.15);
+
+    osc.start(now + idx * 0.04);
+    osc.stop(now + idx * 0.04 + 0.16);
+  });
+}
+
