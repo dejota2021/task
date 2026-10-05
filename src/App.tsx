@@ -194,6 +194,8 @@ interface Sheet {
   createdAt: number;
   columns?: KanbanColumn[]; // custom columns stored per board/sheet
   order?: number;
+  completed?: boolean;
+  completedAt?: number;
 }
 
 // Task Interface
@@ -358,7 +360,8 @@ export default function App() {
   const recognitionRef = useRef<any>(null);
 
   // Active sheet columns list (resolved dynamically)
-  const activeSheet = sheets.find(s => s.id === activeSheetId) || sheets[0];
+  const activeSheets = sheets.filter(s => !s.completed);
+  const activeSheet = sheets.find(s => s.id === activeSheetId) || activeSheets[0];
   const activeColumns = activeSheet?.columns || [];
 
   // Load offline sheet configuration
@@ -434,26 +437,26 @@ export default function App() {
       // Shortcut [ArrowLeft] to switch sheets (with rotation wrap-around)
       if (e.key === 'ArrowLeft' && !isTyping) {
         e.preventDefault();
-        const curIdx = sheets.findIndex(s => s.id === activeSheetId);
+        const curIdx = activeSheets.findIndex(s => s.id === activeSheetId);
         if (curIdx > 0) {
           if (soundEnabled) playWoosh();
-          setActiveSheetId(sheets[curIdx - 1].id);
-        } else if (curIdx === 0 && sheets.length > 0) {
+          setActiveSheetId(activeSheets[curIdx - 1].id);
+        } else if (curIdx === 0 && activeSheets.length > 0) {
           if (soundEnabled) playWoosh();
-          setActiveSheetId(sheets[sheets.length - 1].id);
+          setActiveSheetId(activeSheets[activeSheets.length - 1].id);
         }
       }
 
       // Shortcut [ArrowRight] to switch sheets (with rotation wrap-around)
       if (e.key === 'ArrowRight' && !isTyping) {
         e.preventDefault();
-        const curIdx = sheets.findIndex(s => s.id === activeSheetId);
-        if (curIdx < sheets.length - 1) {
+        const curIdx = activeSheets.findIndex(s => s.id === activeSheetId);
+        if (curIdx < activeSheets.length - 1) {
           if (soundEnabled) playWoosh();
-          setActiveSheetId(sheets[curIdx + 1].id);
-        } else if (curIdx === sheets.length - 1 && sheets.length > 0) {
+          setActiveSheetId(activeSheets[curIdx + 1].id);
+        } else if (curIdx === activeSheets.length - 1 && activeSheets.length > 0) {
           if (soundEnabled) playWoosh();
-          setActiveSheetId(sheets[0].id);
+          setActiveSheetId(activeSheets[0].id);
         }
       }
 
@@ -509,7 +512,9 @@ export default function App() {
           title: data.title || docSnap.id,
           createdAt: data.createdAt || Date.now(),
           columns: data.columns || DEFAULT_COLUMNS,
-          order: data.order ?? 0
+          order: data.order ?? 0,
+          completed: data.completed || false,
+          completedAt: data.completedAt || null
         });
       });
 
@@ -518,10 +523,11 @@ export default function App() {
       localStorage.setItem('sincrotask_sheets_list', JSON.stringify(sheetsList));
 
       const lastActive = localStorage.getItem('sincrotask_active_sheet_id');
-      if (lastActive && sheetsList.some(s => s.id === lastActive)) {
+      const activeSheetsList = sheetsList.filter(s => !s.completed);
+      if (lastActive && activeSheetsList.some(s => s.id === lastActive)) {
         setActiveSheetId(lastActive);
-      } else if (sheetsList.length > 0) {
-        setActiveSheetId(sheetsList[0].id);
+      } else if (activeSheetsList.length > 0) {
+        setActiveSheetId(activeSheetsList[0].id);
       } else {
         setActiveSheetId('');
       }
@@ -749,6 +755,78 @@ export default function App() {
     } catch (err) {
       console.warn("Unable to edit sheet online (Permissions):", err);
       handleFirestoreError(err, OperationType.UPDATE, `boards/${editingSheet.id}`);
+    }
+  };
+
+  // Complete sheet and save to achievements
+  const handleCompleteSheet = async (sheetId: string) => {
+    if (soundEnabled) playMegaCelebration();
+
+    const updatedSheets = sheets.map(s => {
+      if (s.id === sheetId) {
+        return { ...s, completed: true, completedAt: Date.now() };
+      }
+      return s;
+    });
+    setSheets(updatedSheets);
+    localStorage.setItem('sincrotask_sheets_list', JSON.stringify(updatedSheets));
+
+    // Switch to another incomplete sheet if the completed sheet was active
+    if (activeSheetId === sheetId) {
+      const nextActive = updatedSheets.find(s => !s.completed);
+      if (nextActive) {
+        setActiveSheetId(nextActive.id);
+      } else {
+        setActiveSheetId('');
+      }
+    }
+
+    setSyncToastMessage('¡Hoja completada y guardada en Logros! 🏆');
+    setShowSyncToast(true);
+
+    if (isOfflineFallback) return;
+
+    try {
+      await updateDoc(doc(db, 'boards', sheetId), {
+        completed: true,
+        completedAt: Date.now()
+      });
+    } catch (err) {
+      console.warn("Unable to sync sheet completion online:", err);
+      handleFirestoreError(err, OperationType.UPDATE, `boards/${sheetId}`);
+    }
+  };
+
+  // Restore completed sheet back to work feed
+  const handleRestoreSheet = async (sheetId: string) => {
+    if (soundEnabled) playWoosh();
+
+    const updatedSheets = sheets.map(s => {
+      if (s.id === sheetId) {
+        return { ...s, completed: false, completedAt: undefined };
+      }
+      return s;
+    });
+    setSheets(updatedSheets);
+    localStorage.setItem('sincrotask_sheets_list', JSON.stringify(updatedSheets));
+
+    // Set as active sheet
+    setActiveSheetId(sheetId);
+    setActiveView('board');
+
+    setSyncToastMessage('Hoja restaurada al feed de trabajo');
+    setShowSyncToast(true);
+
+    if (isOfflineFallback) return;
+
+    try {
+      await updateDoc(doc(db, 'boards', sheetId), {
+        completed: false,
+        completedAt: null
+      });
+    } catch (err) {
+      console.warn("Unable to sync sheet restoration online:", err);
+      handleFirestoreError(err, OperationType.UPDATE, `boards/${sheetId}`);
     }
   };
 
@@ -1668,10 +1746,14 @@ export default function App() {
   // Medals Calculation
   const calculateMedals = () => {
     let medals = 0;
-    Object.keys(sheetStats).forEach(id => {
-      const stat = sheetStats[id];
-      if (stat.total > 0 && stat.pending === 0 && stat.progress === 0) {
+    sheets.forEach(sheet => {
+      if (sheet.completed) {
         medals += 1;
+      } else {
+        const stat = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
+        if (stat.total > 0 && stat.pending === 0 && stat.progress === 0) {
+          medals += 1;
+        }
       }
     });
     return medals;
@@ -1718,6 +1800,9 @@ export default function App() {
   const totalXP = completedTasksCount;
   const totalMedals = calculateMedals();
   const totalXPVal = totalXP;
+
+  const activeSheetStats = sheetStats[activeSheetId] || { total: 0, completed: 0, pending: 0, progress: 0 };
+  const isActiveSheetCompleted = activeSheetStats.total > 0 && activeSheetStats.pending === 0 && activeSheetStats.progress === 0;
 
   return (
     <div className="min-h-screen bg-[#000000] text-zinc-100 flex flex-col font-sans relative overflow-x-hidden select-none pb-24 md:pb-10">
@@ -1805,14 +1890,18 @@ export default function App() {
 
       {/* MAIN CONTAINER */}
       <main className="flex-1 w-full px-4 sm:px-6 py-5 flex flex-col gap-5 max-w-full">
-        {sheets.length === 0 ? (
+        {activeSheets.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-zinc-900/25 border border-zinc-800 rounded-3xl py-20 animate-sheet-transition">
             <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-5 shadow-[0_0_30px_rgba(99,102,241,0.15)] animate-bounce">
               <ListTodo className="w-8 h-8" />
             </div>
-            <h3 className="text-lg font-extrabold text-white mb-2">No hay hojas creadas</h3>
+            <h3 className="text-lg font-extrabold text-white mb-2">
+              {sheets.length > 0 ? "¡Todas las hojas completadas!" : "No hay hojas creadas"}
+            </h3>
             <p className="text-zinc-400 text-xs max-w-sm mb-6">
-              Organiza tus pendientes creando una hoja colaborativa. Podrás agregar columnas personalizadas y tareas con efectos 3D.
+              {sheets.length > 0 
+                ? "Has completado con éxito todos tus tableros de trabajo. Revisa tus logros o crea una nueva hoja para continuar."
+                : "Organiza tus pendientes creando una hoja colaborativa. Podrás agregar columnas personalizadas y tareas con efectos 3D."}
             </p>
             {showAddSheetInput ? (
               <form onSubmit={handleAddSheet} className="flex flex-col sm:flex-row items-center gap-2.5 p-3 bg-zinc-950 border border-zinc-800 rounded-2xl animate-scale-up shadow-2xl max-w-md w-full">
@@ -1845,13 +1934,24 @@ export default function App() {
                 </div>
               </form>
             ) : (
-              <button
-                onClick={() => { if (soundEnabled) playPop(); setShowAddSheetInput(true); }}
-                className="px-5 py-2.5 bg-amber-500 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-amber-500/20 cursor-pointer flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Crear mi Primera Hoja</span>
-              </button>
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <button
+                  onClick={() => { if (soundEnabled) playPop(); setShowAddSheetInput(true); }}
+                  className="px-5 py-2.5 bg-amber-500 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-amber-500/20 cursor-pointer flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Crear Nueva Hoja</span>
+                </button>
+                {sheets.length > 0 && (
+                  <button
+                    onClick={() => { if (soundEnabled) playPop(); setActiveView('analytics'); }}
+                    className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-bold border border-zinc-700 transition-all cursor-pointer flex items-center gap-2"
+                  >
+                    <Award className="w-4 h-4 text-[#FF9F0A]" />
+                    <span>Ver Logros 🏆</span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
         ) : (
@@ -1937,16 +2037,16 @@ export default function App() {
             <button
               onClick={() => {
                 if (soundEnabled) playWoosh();
-                const curIdx = sheets.findIndex(s => s.id === activeSheetId);
-                if (curIdx > 0) setActiveSheetId(sheets[curIdx - 1].id);
+                const curIdx = activeSheets.findIndex(s => s.id === activeSheetId);
+                if (curIdx > 0) setActiveSheetId(activeSheets[curIdx - 1].id);
               }}
-              disabled={sheets.findIndex(s => s.id === activeSheetId) <= 0}
+              disabled={activeSheets.findIndex(s => s.id === activeSheetId) <= 0}
               className="p-2.5 rounded-xl bg-[#121315] border border-[#26282e] text-zinc-300 disabled:opacity-25 disabled:cursor-not-allowed active:scale-95 transition-all cursor-pointer"
               title="Hoja anterior"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-
+ 
             {/* Current Active Sheet Selector / Drawer Trigger */}
             <button
               onClick={() => {
@@ -1966,15 +2066,15 @@ export default function App() {
                 <ChevronDown className="w-4 h-4 text-[#FF9F0A]" />
               </div>
             </button>
-
+ 
             {/* Next Sheet Button */}
             <button
               onClick={() => {
                 if (soundEnabled) playWoosh();
-                const curIdx = sheets.findIndex(s => s.id === activeSheetId);
-                if (curIdx < sheets.length - 1) setActiveSheetId(sheets[curIdx + 1].id);
+                const curIdx = activeSheets.findIndex(s => s.id === activeSheetId);
+                if (curIdx < activeSheets.length - 1) setActiveSheetId(activeSheets[curIdx + 1].id);
               }}
-              disabled={sheets.findIndex(s => s.id === activeSheetId) >= sheets.length - 1}
+              disabled={activeSheets.findIndex(s => s.id === activeSheetId) >= activeSheets.length - 1}
               className="p-2.5 rounded-xl bg-[#121315] border border-[#26282e] text-zinc-300 disabled:opacity-25 disabled:cursor-not-allowed active:scale-95 transition-all cursor-pointer"
               title="Hoja siguiente"
             >
@@ -2027,7 +2127,7 @@ export default function App() {
         {/* MULTI-SHEET / BOARD TABS SELECTOR BAR - Desktop Layout */}
         <div className="hidden md:flex border-b border-[#22242a] items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-2.5 flex-1 -mb-px sheet-tabs-scrollbar">
-            {sheets.map((sheet, idx) => {
+            {activeSheets.map((sheet, idx) => {
               const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
               const isCompleted = stats.total > 0 && stats.pending === 0 && stats.progress === 0;
               const isActive = activeSheetId === sheet.id;
@@ -2037,7 +2137,7 @@ export default function App() {
                   key={sheet.id}
                   sheet={sheet}
                   idx={idx}
-                  sheetsCount={sheets.length}
+                  sheetsCount={activeSheets.length}
                   isActive={isActive}
                   isCompleted={isCompleted}
                   onSelect={() => setActiveSheetId(sheet.id)}
@@ -2046,6 +2146,7 @@ export default function App() {
                     setEditingSheet(sheet);
                     setEditSheetTitle(sheet.title);
                   }}
+                  onComplete={handleCompleteSheet}
                   deletingSheetId={deletingSheetId}
                   setDeletingSheetId={setDeletingSheetId}
                   handleDeleteSheet={handleDeleteSheet}
@@ -2128,6 +2229,30 @@ export default function App() {
           activeView === 'board' ? (
             <div key={`${activeSheetId}_${slideDirection}`} className={`flex flex-col gap-5 ${slideDirection === 'right' ? 'animate-slide-right' : 'animate-slide-left'}`}>
               
+              {isActiveSheetCompleted && (
+                <div className="px-4 sm:px-6 md:px-8 max-w-full">
+                  <div className="bg-gradient-to-r from-emerald-500/10 via-[#30D158]/15 to-emerald-500/10 border-2 border-dashed border-[#30D158]/40 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-[0_0_20px_rgba(48,209,88,0.15)] animate-bounce-slow">
+                    <div className="flex items-center gap-3 text-center sm:text-left">
+                      <div className="p-3 bg-[#30D158]/20 border border-[#30D158]/35 rounded-xl text-[#30D158] flex items-center justify-center shrink-0">
+                        <Award className="w-5 h-5 animate-pulse" />
+                      </div>
+                      <div className="text-left">
+                        <h4 className="text-sm font-extrabold text-white">¡Tablero Completado con Éxito!</h4>
+                        <p className="text-[11px] text-zinc-300 mt-0.5 leading-relaxed">
+                          Todas las tareas en <strong className="text-[#30D158]">"{activeSheet?.title}"</strong> están terminadas. Guarda esta hoja en tus Logros para celebrar la victoria.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleCompleteSheet(activeSheetId)}
+                      className="px-5 py-2.5 bg-gradient-to-r from-[#30D158] to-emerald-500 hover:from-emerald-400 hover:to-emerald-500 text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-emerald-500/20 cursor-pointer active:scale-[0.98] shrink-0"
+                    >
+                      🏆 Completar Hoja
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Dynamic Columns Kanban Grid (Centered and Floating on desktop if columns <= 3, otherwise left-aligned for scrollability!) */}
               <div className={`flex flex-col md:flex-row md:items-start gap-7 overflow-x-auto pb-8 pt-3 px-4 sm:px-6 md:px-8 scrollbar-thin scrollbar-thumb-slate-800 max-w-full mx-auto ${activeColumns.length <= 3 ? 'md:justify-center' : 'md:justify-start'}`}>
                 {activeColumns.map((col, idx) => {
@@ -2526,6 +2651,38 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Global Sheets Completion Progress Bar */}
+                {(() => {
+                  const totalSheetsCount = sheets.length;
+                  const completedSheetsCount = sheets.filter(s => s.completed).length;
+                  const sheetsPercent = totalSheetsCount > 0 ? Math.round((completedSheetsCount / totalSheetsCount) * 100) : 0;
+
+                  return (
+                    <div className="bg-gradient-to-r from-[#121315] to-[#16171c] p-4 sm:p-5 rounded-2xl border border-amber-500/20 shadow-lg relative overflow-hidden flex flex-col gap-3">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-[#FF9F0A]/5 rounded-full blur-2xl pointer-events-none" />
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Award className="w-4 h-4 text-[#FF9F0A]" />
+                          <span className="text-xs sm:text-sm font-extrabold text-white uppercase tracking-wider">Avance de Hojas Completadas</span>
+                        </div>
+                        <span className="text-xs font-mono font-black text-[#FF9F0A] bg-[#FF9F0A]/10 border border-[#FF9F0A]/35 px-2.5 py-1 rounded-full">{sheetsPercent}% Completado</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="h-3 bg-zinc-950 border border-zinc-900 rounded-full flex-1 overflow-hidden relative">
+                          <div 
+                            className="h-full rounded-full transition-all duration-1000 bg-gradient-to-r from-[#FFD60A] via-[#FF9F0A] to-amber-500 shadow-[0_0_12px_rgba(255,159,10,0.4)]" 
+                            style={{ width: `${sheetsPercent}%` }}
+                          />
+                        </div>
+                        <span className="text-[11px] font-mono font-black text-zinc-300 whitespace-nowrap">{completedSheetsCount} de {totalSheetsCount} {totalSheetsCount === 1 ? 'hoja' : 'hojas'}</span>
+                      </div>
+                      <p className="text-[10px] text-zinc-550 font-mono text-left">
+                        Representa el porcentaje de tableros archivados como completados con éxito del total de tus proyectos creados.
+                      </p>
+                    </div>
+                  );
+                })()}
+
                 {/* 2. Global statistics overview across only active (incomplete) sheets */}
                 {(() => {
                   const incompleteSheets = sheets.filter(s => {
@@ -2659,6 +2816,92 @@ export default function App() {
                             <Sparkles className="w-6 h-6 text-[#FF9F0A] animate-spin" />
                             <p className="text-xs text-zinc-400 font-bold font-mono">¡Has alcanzado la gloria máxima! 🏆</p>
                             <p className="text-[10px] text-zinc-550 font-mono">Todas tus hojas de trabajo se encuentran 100% completadas.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* 4. Progressive list of completed sheets (se almacena todos los completados) */}
+                {(() => {
+                  const completedSheets = sheets.filter(s => s.completed);
+
+                  return (
+                    <div className="flex flex-col gap-3.5 pt-4 border-t border-zinc-900">
+                      <div className="text-[10px] font-bold text-amber-400 uppercase tracking-widest px-1 flex items-center gap-1.5">
+                        <Award className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Hojas Completadas ({completedSheets.length})</span>
+                      </div>
+                      
+                      <div className="flex flex-col gap-3">
+                        {completedSheets.map((sheet) => {
+                          const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
+                          const completedDateStr = sheet.completedAt 
+                            ? new Date(sheet.completedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : 'Recientemente';
+                          
+                          return (
+                            <div 
+                              key={sheet.id}
+                              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-zinc-900/35 border border-amber-500/20 hover:border-amber-500/40 transition-all group shadow-md gap-3 relative overflow-hidden"
+                            >
+                              {/* Shiny diagonal background gradient for completed item */}
+                              <div className="absolute inset-0 bg-gradient-to-r from-amber-500/0 via-amber-500/[0.02] to-amber-500/0 pointer-events-none" />
+                              
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400">
+                                  <Check className="w-4 h-4 stroke-[3]" />
+                                </div>
+                                <div className="text-left">
+                                  <span className="text-xs sm:text-sm font-bold text-white">
+                                    {sheet.title}
+                                  </span>
+                                  <span className="text-[10px] text-zinc-500 block font-mono mt-0.5">
+                                    Completada el {completedDateStr} • {stats.total} tareas listas 🏆
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Completed Progress bar */}
+                              <div className="flex items-center gap-3 w-full sm:w-40 shrink-0">
+                                <div className="h-2 bg-zinc-950 border border-zinc-900 rounded-full flex-1 overflow-hidden relative">
+                                  <div 
+                                    className="h-full rounded-full bg-gradient-to-r from-[#30D158] to-emerald-500 shadow-[0_0_8px_rgba(48,209,88,0.3)]" 
+                                    style={{ width: '100%' }}
+                                  />
+                                </div>
+                                <span className="text-[10px] font-mono font-black text-[#30D158] w-8 text-right shrink-0">100%</span>
+                              </div>
+
+                              <div className="flex items-center gap-3 w-full sm:w-auto shrink-0 justify-end">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRestoreSheet(sheet.id);
+                                  }}
+                                  className="px-3 py-1.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white transition-all text-[11px] font-bold cursor-pointer"
+                                >
+                                  Restaurar
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteSheet(sheet.id);
+                                  }}
+                                  className="p-2 rounded-xl bg-zinc-950 hover:bg-rose-950/20 border border-zinc-800 hover:border-rose-900/30 text-zinc-500 hover:text-rose-450 transition-all cursor-pointer"
+                                  title="Eliminar hoja permanentemente"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {completedSheets.length === 0 && (
+                          <div className="py-8 text-center border border-dashed border-[#222428] rounded-2xl bg-[#121315]/10 flex flex-col items-center justify-center">
+                            <p className="text-[11px] text-zinc-600 font-mono">No hay hojas archivadas como completadas todavía.</p>
                           </div>
                         )}
                       </div>
@@ -2884,7 +3127,7 @@ export default function App() {
 
             {/* List of sheets */}
             <div className="flex flex-col gap-2.5 overflow-y-auto max-h-[50vh] pr-1">
-              {sheets.map((sheet) => {
+              {activeSheets.map((sheet) => {
                 const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
                 const isCompleted = stats.total > 0 && stats.pending === 0 && stats.progress === 0;
                 const isActive = activeSheetId === sheet.id;
@@ -2905,7 +3148,7 @@ export default function App() {
                   >
                     <div className="flex items-center gap-3 truncate">
                       <Layers className="w-5 h-5 text-amber-400 shrink-0" />
-                      <div className="truncate">
+                      <div className="truncate text-left">
                         <div className="flex items-center gap-2">
                           <span className={`text-sm font-bold truncate ${isActive ? 'text-white' : 'text-zinc-200'}`}>
                             {sheet.title}
@@ -2925,6 +3168,16 @@ export default function App() {
                     <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => {
+                          handleCompleteSheet(sheet.id);
+                          setShowMobileSheetsDrawer(false);
+                        }}
+                        className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-emerald-450"
+                        title="Marcar como completada"
+                      >
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                      </button>
+                      <button
+                        onClick={() => {
                           if (soundEnabled) playPop();
                           setEditingSheet(sheet);
                           setEditSheetTitle(sheet.title);
@@ -2935,7 +3188,7 @@ export default function App() {
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      {sheets.length > 1 && (
+                      {activeSheets.length > 1 && (
                         <button
                           onClick={() => {
                             if (soundEnabled) playPop();
@@ -3745,6 +3998,7 @@ interface SheetTabProps {
   onSelect: () => void;
   onMove: (sheetId: string, direction: 'left' | 'right') => void;
   onEdit: () => void;
+  onComplete: (sheetId: string) => void;
   deletingSheetId: string | null;
   setDeletingSheetId: (id: string | null) => void;
   handleDeleteSheet: (id: string) => void;
@@ -3759,6 +4013,7 @@ function SheetTab({
   onSelect, 
   onMove, 
   onEdit, 
+  onComplete,
   deletingSheetId, 
   setDeletingSheetId, 
   handleDeleteSheet 
@@ -3824,6 +4079,20 @@ function SheetTab({
 
         {isCompleted && (
           <span className="text-[10px] font-bold text-emerald-400 shrink-0" title="¡Medalla ganada!">Completado</span>
+        )}
+
+        {/* Complete sheet check button */}
+        {isActive && (
+          <span 
+            onClick={(e) => {
+              e.stopPropagation();
+              onComplete(sheet.id);
+            }}
+            className="ml-1 p-0.5 rounded hover:bg-emerald-950 text-slate-400 hover:text-emerald-400 transition-colors shrink-0 cursor-pointer"
+            title="Marcar como Completada"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+          </span>
         )}
 
         {/* Edit sheet pencil button */}

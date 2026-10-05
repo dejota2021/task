@@ -249,7 +249,7 @@ Always include a friendly, concise, and smart auditory confirmation feedback in 
     });
   }
 
-  app.listen(port, () => {
+  app.listen(Number(port), '0.0.0.0', () => {
     console.log(`Server listening on port ${port}`);
   });
 }
