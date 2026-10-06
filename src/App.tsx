@@ -2501,6 +2501,42 @@ export default function App() {
           activeView === 'board' ? (
             <div key={`${activeSheetId}_${slideDirection}`} className={`flex flex-col gap-5 ${slideDirection === 'right' ? 'animate-slide-right' : 'animate-slide-left'}`}>
               
+              {/* Selected tasks actions banner */}
+              {selectedTaskIds.length > 0 && (
+                <div className="px-4 sm:px-6 md:px-8 max-w-full">
+                  <div className="bg-[#FF375F]/15 border-2 border-dashed border-[#FF375F]/40 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-[0_0_20px_rgba(255,55,95,0.15)] animate-scale-up">
+                    <div className="flex items-center gap-3 text-center sm:text-left">
+                      <div className="p-3 bg-[#FF375F]/20 border border-[#FF375F]/35 rounded-xl text-[#FF375F] flex items-center justify-center shrink-0">
+                        <Trash2 className="w-5 h-5 animate-pulse" />
+                      </div>
+                      <div className="text-left">
+                        <h4 className="text-sm font-extrabold text-white">Tareas Seleccionadas</h4>
+                        <p className="text-[11px] text-zinc-300 mt-0.5 leading-relaxed">
+                          Has seleccionado <strong className="text-[#FF375F]">{selectedTaskIds.length}</strong> {selectedTaskIds.length === 1 ? 'pendiente' : 'pendientes'}. Puedes eliminarlos permanentemente a la vez.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <button
+                        onClick={() => {
+                          if (soundEnabled) playPop();
+                          setSelectedTaskIds([]);
+                        }}
+                        className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-bold border border-zinc-700 transition-all cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleDeleteSelectedTasks}
+                        className="px-5 py-2.5 bg-gradient-to-r from-[#FF375F] to-rose-600 hover:from-rose-500 hover:to-rose-600 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-rose-500/20 cursor-pointer active:scale-[0.98]"
+                      >
+                        🗑️ Eliminar Seleccionados
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {isActiveSheetCompleted && (
                 <div className="px-4 sm:px-6 md:px-8 max-w-full">
                   <div className="bg-gradient-to-r from-emerald-500/10 via-[#30D158]/15 to-emerald-500/10 border-2 border-dashed border-[#30D158]/40 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-[0_0_20px_rgba(48,209,88,0.15)] animate-bounce-slow">
@@ -2828,353 +2864,107 @@ export default function App() {
               </div>
             </div>
           ) : (
-            /* DYNAMIC "LOGROS" VIEW (Reconstructed with a Unified Analytics Dashboard and Mascot) */
+            /* DYNAMIC "LOGROS" VIEW (Medals and achievements unencumbered view) */
             <div key={`${activeSheetId}_${slideDirection}`} className={`flex flex-col gap-6 px-4 sm:px-6 md:px-8 max-w-full mx-auto ${slideDirection === 'right' ? 'animate-slide-right' : 'animate-slide-left'}`}>
               
-              {/* Custom CSS Animation Style for Mascot Hand Wave */}
-              <style>{`
-                @keyframes waveArm {
-                  0%, 100% { transform: rotate(0deg); }
-                  50% { transform: rotate(-30deg); }
-                }
-                .animate-wave-arm {
-                  animation: waveArm 1.6s ease-in-out infinite;
-                  transform-origin: 67px 45px;
-                }
-                @keyframes bounceSlow {
-                  0%, 100% { transform: translateY(0); }
-                  50% { transform: translateY(-6px); }
-                }
-                .animate-bounce-slow {
-                  animation: bounceSlow 3s ease-in-out infinite;
-                }
-              `}</style>
-
               {/* Title Section */}
               <div className="flex flex-col gap-1">
                 <h2 className="text-base sm:text-xl font-display font-extrabold text-white tracking-wider uppercase flex items-center gap-2">
                   <Award className="w-5 h-5 text-[#FF9F0A] animate-pulse" />
-                  <span>LOGROS & ANALÍTICAS UNIFICADAS</span>
+                  <span>MIS MEDALLAS</span>
                 </h2>
                 <p className="text-xs text-zinc-400 font-sans">
-                  Monitorea tus medallas, rendimiento global, efectividad y el estado completo de tus proyectos en tiempo real
+                  Visualiza tus logros y medallas acumuladas
                 </p>
               </div>
 
-              {/* Layout Content: Mascot & Global metrics */}
-              <div className="flex flex-col gap-6">
-                
-                {/* 1. Animated Mascot Companion holding the completed sheets medal */}
-                <div className="flex flex-col md:flex-row items-center gap-6 bg-gradient-to-tr from-[#121315] to-[#1e1f24] border border-[#26282e] p-5 sm:p-6 rounded-3xl relative overflow-hidden group shadow-2xl">
-                  {/* Glowing light bleed in background */}
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-[#FF9F0A]/5 rounded-full blur-3xl pointer-events-none" />
-                  
-                  {/* Floating SVG Character Mascot */}
-                  <div className="w-28 h-28 shrink-0 relative flex items-center justify-center select-none">
-                    <svg className="w-full h-full animate-bounce-slow" viewBox="0 0 100 100">
-                      {/* Bouncing Floor Shadow */}
-                      <ellipse cx="50" cy="90" rx="18" ry="3.5" className="fill-black/50" />
-                      
-                      {/* Floating Robot Body */}
-                      <rect x="35" y="30" width="30" height="40" rx="10" className="fill-[#1b1c21] stroke-[#FF9F0A]/60 stroke-[1.5] shadow-inner" />
-                      
-                      {/* Futuristic glowing chest indicator */}
-                      <circle cx="50" cy="50" r="5" className="fill-[#FF9F0A] animate-pulse" />
-                      
-                      {/* Robot Head */}
-                      <circle cx="50" cy="20" r="14" className="fill-[#25272e] stroke-[#FF9F0A]/60 stroke-[1.5]" />
-                      
-                      {/* Glowing visor */}
-                      <rect x="42" y="14" width="16" height="11" rx="3.5" className="fill-zinc-950" />
-                      <circle cx="46" cy="19.5" r="1.5" className="fill-[#FF9F0A]" />
-                      <circle cx="54" cy="19.5" r="1.5" className="fill-[#FF9F0A]" />
-                      
-                      {/* Cute Head Antenna */}
-                      <line x1="50" y1="6" x2="50" y2="12" className="stroke-[#FF9F0A] stroke-[2]" />
-                      <circle cx="50" cy="5" r="2.5" className="fill-[#FF9F0A] animate-ping" />
-                      
-                      {/* Left Arm */}
-                      <path d="M 33 45 Q 26 53 32 62" fill="none" className="stroke-zinc-500 stroke-[2] stroke-linecap-round" />
-                      
-                      {/* Waving Right Arm */}
-                      <path d="M 67 45 Q 76 35 73 24" fill="none" className="stroke-[#FF9F0A] stroke-[2.5] stroke-linecap-round animate-wave-arm" />
-                      
-                      {/* Sparkly Waving Palm */}
-                      <circle cx="73" cy="24" r="3" className="fill-[#FFB340] animate-pulse" />
-                    </svg>
-                    
-                    {/* Floating medal with completed sheets count counter */}
-                    <div className="absolute -bottom-1 -right-1 w-14 h-14 bg-gradient-to-tr from-[#FFD60A] via-[#FF9F0A] to-[#FFB340] rounded-full border-2 border-black flex flex-col items-center justify-center shadow-lg shadow-[#FF9F0A]/35 animate-pulse select-none">
-                      <Award className="w-5 h-5 text-black filter drop-shadow-md" />
-                      <span className="text-[10px] font-mono font-black text-black -mt-0.5">{totalMedals}</span>
-                    </div>
-                  </div>
-
-                  {/* Text Dialogue block */}
-                  <div className="flex-1 text-center md:text-left">
-                    <div className="flex items-center justify-center md:justify-start gap-2">
-                      <h4 className="text-sm sm:text-base font-extrabold text-white">Asistente de Logros SincroTask</h4>
-                      <span className="text-[8px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full uppercase tracking-widest animate-pulse">Compañero 3D</span>
-                    </div>
-                    <p className="text-zinc-300 text-xs mt-2.5 leading-relaxed font-medium">
-                      ¡Hola! Te doy la bienvenida a tu centro de **Estadísticas unificadas**. Aquí consolidamos todo tu progreso e historial. He ocultado y archivado tus hojas listas para mantener tu espacio de trabajo totalmente despejado y productivo. ¡Buen trabajo!
-                    </p>
-                    <div className="mt-3.5 flex flex-wrap gap-2 justify-center md:justify-start">
-                      <span className="text-[9px] font-mono font-bold text-zinc-400 bg-zinc-950 border border-zinc-800 px-2.5 py-1 rounded-lg">
-                        Mascota: Animada y Activa 🤖
-                      </span>
-                      <span className="text-[9px] font-mono font-bold text-[#FF9F0A] bg-[#FF9F0A]/10 border border-[#FF9F0A]/20 px-2.5 py-1 rounded-lg">
-                        Métricas consolidadas en tiempo real 📈
-                      </span>
-                    </div>
-                  </div>
+              {/* Medals Display Card */}
+              <div className="flex flex-col items-center justify-center bg-gradient-to-tr from-[#121315] to-[#1e1f24] border border-[#26282e] p-8 rounded-3xl relative overflow-hidden shadow-2xl max-w-sm mx-auto w-full text-center">
+                <div className="absolute inset-0 bg-radial-gradient from-[#FF9F0A]/5 to-transparent opacity-35 pointer-events-none" />
+                <div className="w-24 h-24 bg-gradient-to-tr from-[#FFD60A] via-[#FF9F0A] to-[#FFB340] rounded-full border-4 border-black flex flex-col items-center justify-center shadow-2xl shadow-[#FF9F0A]/20 animate-pulse select-none mb-4">
+                  <Award className="w-10 h-10 text-black filter drop-shadow-md" />
+                  <span className="text-lg font-mono font-black text-black -mt-1">{totalMedals}</span>
                 </div>
-
-                {/* UNIFIED CYBERPUNK ANALYTICS DASHBOARD */}
-                {(() => {
-                  const completedSheets = sheets.filter(s => s.completed);
-                  const totalSheetsCount = sheets.length;
-                  const completedSheetsCount = completedSheets.length;
-                  const activeSheetsCount = sheets.filter(s => !s.completed).length;
-                  const sheetsPercent = totalSheetsCount > 0 ? Math.round((completedSheetsCount / totalSheetsCount) * 100) : 0;
-
-                  // Aggregate tasks stats across all projects (active and completed)
-                  const globalStats = (() => {
-                    let completed = 0;
-                    let pending = 0;
-                    let progress = 0;
-                    let total = 0;
-                    sheets.forEach(sheet => {
-                      const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
-                      completed += stats.completed;
-                      pending += stats.pending;
-                      progress += stats.progress;
-                      total += stats.total;
-                    });
-                    return { completed, pending, progress, total };
-                  })();
-                  const globalEffectiveness = globalStats.total > 0 ? Math.round((globalStats.completed / globalStats.total) * 100) : 0;
-
-                  return (
-                    <div className="flex flex-col gap-6">
-                      
-                      {/* Metric Indicator Cards */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        
-                        {/* CARD 1: Rendimiento Global (XP Total) */}
-                        <div className="bg-[#121315] p-5 rounded-2xl border border-amber-500/20 shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[120px] transition-all hover:border-amber-500/40">
-                          <div className="absolute -top-6 -right-6 w-16 h-16 bg-[#FF9F0A]/5 rounded-full blur-xl pointer-events-none" />
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">XP Total Acumulado</span>
-                            <span className="p-2 bg-[#FF9F0A]/10 border border-[#FF9F0A]/20 rounded-xl text-[#FF9F0A]">
-                              <Zap className="w-4 h-4 animate-pulse" />
-                            </span>
-                          </div>
-                          <div className="mt-3">
-                            <div className="text-2xl sm:text-3xl font-mono font-black text-[#FF9F0A] tabular-nums leading-none">
-                              {globalStats.completed} <span className="text-xs font-sans font-normal text-zinc-500">XP</span>
-                            </div>
-                            <p className="text-[10px] text-zinc-550 mt-1 font-mono">
-                              Tareas terminadas en todas las hojas ({globalStats.completed} de {globalStats.total} totales)
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* CARD 2: Tasa de Efectividad */}
-                        <div className="bg-[#121315] p-5 rounded-2xl border border-emerald-500/20 shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[120px] transition-all hover:border-emerald-500/40">
-                          <div className="absolute -top-6 -right-6 w-16 h-16 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Eficiencia Global</span>
-                            <span className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-[#30D158]">
-                              <TrendingUp className="w-4 h-4" />
-                            </span>
-                          </div>
-                          <div className="mt-3">
-                            <div className="text-2xl sm:text-3xl font-mono font-black text-[#30D158] tabular-nums leading-none">
-                              {globalEffectiveness}%
-                            </div>
-                            <p className="text-[10px] text-zinc-550 mt-1 font-mono">
-                              Tasa global de efectividad y cumplimiento de tareas
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* CARD 3: Proyectos & Medallas */}
-                        <div className="bg-[#121315] p-5 rounded-2xl border border-blue-500/20 shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[120px] transition-all hover:border-blue-500/40">
-                          <div className="absolute -top-6 -right-6 w-16 h-16 bg-blue-500/5 rounded-full blur-xl pointer-events-none" />
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Tableros de Trabajo</span>
-                            <span className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-xl text-[#64D2FF]">
-                              <Layers className="w-4 h-4" />
-                            </span>
-                          </div>
-                          <div className="mt-3">
-                            <div className="text-2xl sm:text-3xl font-mono font-black text-[#64D2FF] tabular-nums leading-none">
-                              {totalSheetsCount} <span className="text-xs font-sans font-normal text-zinc-500">Hojas</span>
-                            </div>
-                            <p className="text-[10px] text-zinc-550 mt-1 font-mono">
-                              {activeSheetsCount} activas • {completedSheetsCount} completadas ({sheetsPercent}% de avance de hojas)
-                            </p>
-                          </div>
-                        </div>
-
-                      </div>
-
-                      {/* Stacked Interactive Distribution Bar & Detailed Metrics */}
-                      <div className="bg-gradient-to-tr from-[#121315] to-[#15161c] p-5 sm:p-6 rounded-3xl border border-[#26282e] shadow-xl flex flex-col gap-4">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
-                            <BarChart3 className="w-4 h-4 text-[#FF9F0A]" />
-                            Distribución de Tareas en Hojas Activas & Completadas
-                          </span>
-                          <span className="text-[10px] font-mono text-zinc-500">Unificado</span>
-                        </div>
-
-                        {/* Visual segment progress bar */}
-                        <div className="h-4 bg-zinc-950 border border-zinc-900 rounded-full flex overflow-hidden w-full relative p-0.5">
-                          {globalStats.total > 0 ? (
-                            <>
-                              <div 
-                                style={{ width: `${(globalStats.completed / globalStats.total) * 100}%` }}
-                                className="h-full bg-gradient-to-r from-emerald-500 to-[#30D158] rounded-l-full transition-all duration-1000"
-                                title={`Listas: ${globalStats.completed}`}
-                              />
-                              <div 
-                                style={{ width: `${(globalStats.progress / globalStats.total) * 100}%` }}
-                                className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-1000"
-                                title={`En Proceso: ${globalStats.progress}`}
-                              />
-                              <div 
-                                style={{ width: `${(globalStats.pending / globalStats.total) * 100}%` }}
-                                className="h-full bg-gradient-to-r from-[#FF9F0A] to-amber-500 rounded-r-full transition-all duration-1000"
-                                title={`Pendientes: ${globalStats.pending}`}
-                              />
-                            </>
-                          ) : (
-                            <div className="h-full w-full bg-zinc-900 rounded-full flex items-center justify-center text-[9px] text-zinc-600 font-mono">Sin tareas disponibles</div>
-                          )}
-                        </div>
-
-                        {/* Detailed Metrics Row */}
-                        <div className="grid grid-cols-3 gap-3 text-center mt-1">
-                          <div className="flex flex-col items-center">
-                            <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                              <span className="w-2 h-2 rounded-full bg-[#FF9F0A]" />
-                              Pendientes
-                            </span>
-                            <span className="text-sm sm:text-base font-mono font-black text-[#FF9F0A] mt-0.5">{globalStats.pending}</span>
-                          </div>
-                          <div className="flex flex-col items-center">
-                            <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                              <span className="w-2 h-2 rounded-full bg-[#64D2FF]" />
-                              En Proceso
-                            </span>
-                            <span className="text-sm sm:text-base font-mono font-black text-[#64D2FF] mt-0.5">{globalStats.progress}</span>
-                          </div>
-                          <div className="flex flex-col items-center">
-                            <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                              <span className="w-2 h-2 rounded-full bg-[#30D158]" />
-                              Listas
-                            </span>
-                            <span className="text-sm sm:text-base font-mono font-black text-[#30D158] mt-0.5">{globalStats.completed}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                    </div>
-                  );
-                })()}
-
-                {/* 2. Progressive list of completed sheets (se almacena todos los completados) */}
-                {(() => {
-                  const completedSheets = sheets.filter(s => s.completed);
-
-                  return (
-                    <div className="flex flex-col gap-3.5 pt-4 border-t border-zinc-900">
-                      <div className="text-[10px] font-bold text-amber-400 uppercase tracking-widest px-1 flex items-center gap-1.5">
-                        <Award className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                        <span>Hojas Completadas ({completedSheets.length})</span>
-                      </div>
-                      
-                      <div className="flex flex-col gap-3">
-                        {completedSheets.map((sheet, idx) => {
-                          const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
-                          const completedDateStr = sheet.completedAt 
-                            ? new Date(sheet.completedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-                            : 'Recientemente';
-                          
-                          const isFocused = activeView === 'analytics' && analyticsFocusedIndex === idx;
-
-                          return (
-                            <div 
-                              key={sheet.id}
-                              id={`achievements-sheet-item-${idx}`}
-                              className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-zinc-900/35 border transition-all group shadow-md gap-3 relative overflow-hidden ${isFocused ? 'border-[#FF9F0A] ring-2 ring-[#FF9F0A] ring-offset-1 ring-offset-black scale-[1.01] shadow-[0_0_15px_rgba(255,159,10,0.35)] z-10' : 'border-amber-500/20 hover:border-amber-500/40'}`}
-                            >
-                              {/* Shiny diagonal background gradient for completed item */}
-                              <div className="absolute inset-0 bg-gradient-to-r from-amber-500/0 via-amber-500/[0.02] to-amber-500/0 pointer-events-none" />
-                              
-                              <div className="flex items-center gap-3">
-                                <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400">
-                                  <Check className="w-4 h-4 stroke-[3]" />
-                                </div>
-                                <div className="text-left">
-                                  <span className="text-xs sm:text-sm font-bold text-white">
-                                    {sheet.title}
-                                  </span>
-                                  <span className="text-[10px] text-zinc-550 block font-mono mt-0.5">
-                                    Completada el {completedDateStr} • {stats.total} tareas listas 🏆
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Completed Progress bar */}
-                              <div className="flex items-center gap-3 w-full sm:w-40 shrink-0">
-                                <div className="h-2 bg-zinc-950 border border-zinc-900 rounded-full flex-1 overflow-hidden relative">
-                                  <div 
-                                    className="h-full rounded-full bg-gradient-to-r from-[#30D158] to-emerald-500 shadow-[0_0_8px_rgba(48,209,88,0.3)]" 
-                                    style={{ width: '100%' }}
-                                  />
-                                </div>
-                                <span className="text-[10px] font-mono font-black text-[#30D158] w-8 text-right shrink-0">100%</span>
-                              </div>
-
-                              <div className="flex items-center gap-3 w-full sm:w-auto shrink-0 justify-end">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRestoreSheet(sheet.id);
-                                  }}
-                                  className="px-3 py-1.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white transition-all text-[11px] font-bold cursor-pointer"
-                                >
-                                  Restaurar
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteSheet(sheet.id);
-                                  }}
-                                  className="p-2 rounded-xl bg-zinc-950 hover:bg-rose-950/20 border border-zinc-800 hover:border-rose-900/30 text-zinc-500 hover:text-rose-450 transition-all cursor-pointer"
-                                  title="Eliminar hoja permanentemente"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-
-                        {completedSheets.length === 0 && (
-                          <div className="py-8 text-center border border-dashed border-[#222428] rounded-2xl bg-[#121315]/10 flex flex-col items-center justify-center">
-                            <p className="text-[11px] text-zinc-650 font-mono">No hay hojas archivadas como completadas todavía.</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-
+                <h3 className="text-base font-extrabold text-white">Medallas Ganadas</h3>
+                <p className="text-xs text-zinc-400 mt-1">Has completado exitosamente {totalMedals} {totalMedals === 1 ? 'tablero' : 'tableros'}</p>
               </div>
+
+              {/* List of completed sheets */}
+              {(() => {
+                const completedSheets = sheets.filter(s => s.completed);
+
+                return (
+                  <div className="flex flex-col gap-3.5 pt-4 border-t border-zinc-900 max-w-2xl mx-auto w-full">
+                    <div className="text-[10px] font-bold text-amber-400 uppercase tracking-widest px-1 flex items-center gap-1.5 justify-center sm:justify-start">
+                      <Award className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                      <span>Hojas Completadas ({completedSheets.length})</span>
+                    </div>
+                    
+                    <div className="flex flex-col gap-3">
+                      {completedSheets.map((sheet, idx) => {
+                        const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
+                        const completedDateStr = sheet.completedAt 
+                          ? new Date(sheet.completedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : 'Recientemente';
+                        
+                        const isFocused = activeView === 'analytics' && analyticsFocusedIndex === idx;
+
+                        return (
+                          <div 
+                            key={sheet.id}
+                            id={`achievements-sheet-item-${idx}`}
+                            className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-zinc-900/35 border transition-all group shadow-md gap-3 relative overflow-hidden ${isFocused ? 'border-[#FF9F0A] ring-2 ring-[#FF9F0A] ring-offset-1 ring-offset-black scale-[1.01] shadow-[0_0_15px_rgba(255,159,10,0.35)] z-10' : 'border-amber-500/20 hover:border-amber-500/40'}`}
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-r from-amber-500/0 via-amber-500/[0.02] to-amber-500/0 pointer-events-none" />
+                            
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400">
+                                <Check className="w-4 h-4 stroke-[3]" />
+                              </div>
+                              <div className="text-left">
+                                <span className="text-xs sm:text-sm font-bold text-white">
+                                  {sheet.title}
+                                </span>
+                                <span className="text-[10px] text-zinc-550 block font-mono mt-0.5">
+                                  Completada el {completedDateStr} • {stats.total} tareas listas 🏆
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 w-full sm:w-auto shrink-0 justify-end">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRestoreSheet(sheet.id);
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white transition-all text-[11px] font-bold cursor-pointer"
+                              >
+                                Restaurar
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteSheet(sheet.id);
+                                }}
+                                className="p-2 rounded-xl bg-zinc-950 hover:bg-rose-950/20 border border-zinc-800 hover:border-rose-900/30 text-zinc-500 hover:text-rose-450 transition-all cursor-pointer"
+                                title="Eliminar hoja permanentemente"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {completedSheets.length === 0 && (
+                        <div className="py-8 text-center border border-dashed border-[#222428] rounded-2xl bg-[#121315]/10 flex flex-col items-center justify-center">
+                          <p className="text-[11px] text-zinc-650 font-mono">No hay hojas archivadas como completadas todavía.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
             </div>
           )
@@ -3512,10 +3302,22 @@ export default function App() {
                 </label>
                 <input 
                   type="text" 
+                  id="edit-task-title-field"
                   value={editTaskTitle}
                   onChange={(e) => setEditTaskTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      document.getElementById('edit-task-description-field')?.focus();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      if (soundEnabled) playPop();
+                      setEditingTask(null);
+                    }
+                  }}
                   maxLength={150}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 placeholder:text-zinc-650"
+                  autoFocus
                   required
                 />
               </div>
@@ -3525,8 +3327,22 @@ export default function App() {
                   Descripción (Opcional)
                 </label>
                 <textarea 
+                  id="edit-task-description-field"
                   value={editTaskDesc}
                   onChange={(e) => setEditTaskDesc(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      document.getElementById('edit-task-title-field')?.focus();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      if (soundEnabled) playPop();
+                      setEditingTask(null);
+                    } else if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleEditTask(e);
+                    }
+                  }}
                   maxLength={1000}
                   rows={4}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 resize-none placeholder:text-zinc-650"
@@ -3897,16 +3713,32 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isFirstInCol 
         transform: `translateX(${dragOffset}px) rotate(${dragOffset * 0.04}deg) perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
         transition: isDraggingCard.current ? 'none' : 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
         cursor: isDraggingCard.current ? 'grabbing' : 'grab',
-        borderColor: isKeyboardFocused ? '#FF9F0A' : `${cardVibrantColor}B5`,
-        backgroundColor: isKeyboardFocused ? `${cardVibrantColor}55` : `${cardVibrantColor}35`,
-        boxShadow: isKeyboardFocused 
-          ? `0 0 35px rgba(255,159,10,0.85), inset 0 0 25px ${cardVibrantColor}60, 0 0 15px rgba(255,159,10,0.4)`
-          : `0 12px 30px -4px ${cardVibrantColor}70, inset 0 0 20px ${cardVibrantColor}25, 0 0 15px ${cardVibrantColor}1F`
+        borderColor: isSelected ? '#FF9F0A' : isKeyboardFocused ? '#FF9F0A' : `${cardVibrantColor}B5`,
+        backgroundColor: isSelected ? 'rgba(255, 159, 10, 0.15)' : isKeyboardFocused ? `${cardVibrantColor}55` : `${cardVibrantColor}35`,
+        boxShadow: isSelected
+          ? `0 0 25px rgba(255,159,10,0.5), inset 0 0 20px rgba(255,159,10,0.2)`
+          : isKeyboardFocused 
+            ? `0 0 35px rgba(255,159,10,0.85), inset 0 0 25px ${cardVibrantColor}60, 0 0 15px rgba(255,159,10,0.4)`
+            : `0 12px 30px -4px ${cardVibrantColor}70, inset 0 0 20px ${cardVibrantColor}25, 0 0 15px ${cardVibrantColor}1F`
       }}
-      className={`task-card-3d p-2.5 sm:p-3 rounded-xl border hover:border-white/80 shadow-md transform group flex flex-col gap-1.5 relative select-none touch-pan-y min-h-[65px] h-auto flex-shrink-0 ${isKeyboardFocused ? 'ring-2 ring-[#FF9F0A] ring-offset-2 ring-offset-black scale-[1.03] z-10 animate-pulse' : ''}`}
+      className={`task-card-3d p-2.5 sm:p-3 rounded-xl border hover:border-white/80 shadow-md transform group flex flex-col gap-1.5 relative select-none touch-pan-y min-h-[65px] h-auto flex-shrink-0 ${(isSelected || isKeyboardFocused) ? 'ring-2 ring-[#FF9F0A] ring-offset-2 ring-offset-black scale-[1.03] z-10 animate-pulse' : ''}`}
     >
       
-      <div className="flex items-start justify-between gap-1.5 w-full">
+      <div className="flex items-start justify-between gap-2.5 w-full">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onToggleSelect) onToggleSelect();
+          }}
+          className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all shrink-0 mt-0.5 cursor-pointer ${
+            isSelected 
+              ? 'bg-[#FF9F0A] border-[#FF9F0A] text-black shadow-[0_0_8px_rgba(255,159,10,0.5)]' 
+              : 'border-zinc-700 hover:border-zinc-500 bg-black/40'
+          }`}
+          title={isSelected ? "Deseleccionar pendiente" : "Seleccionar pendiente"}
+        >
+          {isSelected && <Check className="w-2.5 h-2.5 stroke-[4] text-black" />}
+        </button>
         <h4 className="font-extrabold text-xs sm:text-sm text-zinc-100 transition-colors leading-tight tracking-wide break-words whitespace-normal py-0.5 max-w-full text-left flex-1">
           {task.title}
         </h4>
