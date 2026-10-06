@@ -668,6 +668,21 @@ export default function App() {
         }
       }
 
+      // Shortcut [Shift + X] to delete the currently focused task card
+      if (e.shiftKey && (e.key === 'X' || e.key === 'x') && !isTyping && keyboardFocusArea === 'board' && activeView === 'board') {
+        const cols = activeSheet?.columns || DEFAULT_COLUMNS;
+        const targetColId = cols[focusedColumnIndex]?.id;
+        const colTasks = tasks
+          .filter(t => t.column === targetColId)
+          .filter(t => !boardFilterQuery || t.title.toLowerCase().includes(boardFilterQuery.toLowerCase()) || t.description?.toLowerCase().includes(boardFilterQuery.toLowerCase()));
+        const focusedTask = colTasks[focusedTaskIndex];
+        if (focusedTask) {
+          e.preventDefault();
+          handleDeleteTask(focusedTask);
+          return;
+        }
+      }
+
       // Shortcut 'D' or 'd' to move card forward (avanzar columna)
       if ((e.key === 'D' || e.key === 'd') && !isTyping && keyboardFocusArea === 'board') {
         const cols = activeSheet?.columns || DEFAULT_COLUMNS;
@@ -2878,15 +2893,58 @@ export default function App() {
                 </p>
               </div>
 
-              {/* Medals Display Card */}
-              <div className="flex flex-col items-center justify-center bg-gradient-to-tr from-[#121315] to-[#1e1f24] border border-[#26282e] p-8 rounded-3xl relative overflow-hidden shadow-2xl max-w-sm mx-auto w-full text-center">
-                <div className="absolute inset-0 bg-radial-gradient from-[#FF9F0A]/5 to-transparent opacity-35 pointer-events-none" />
-                <div className="w-24 h-24 bg-gradient-to-tr from-[#FFD60A] via-[#FF9F0A] to-[#FFB340] rounded-full border-4 border-black flex flex-col items-center justify-center shadow-2xl shadow-[#FF9F0A]/20 animate-pulse select-none mb-4">
-                  <Award className="w-10 h-10 text-black filter drop-shadow-md" />
-                  <span className="text-lg font-mono font-black text-black -mt-1">{totalMedals}</span>
+              {/* Medals, XP and Tasks Summary Cards */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-5 max-w-xl mx-auto w-full">
+                {/* 1. Medals Display Card */}
+                <div 
+                  onMouseMove={handleGeneric3DMove}
+                  onMouseLeave={handleGeneric3DLeave}
+                  onTouchMove={handleGeneric3DMove}
+                  onTouchEnd={handleGeneric3DLeave}
+                  className="flex flex-col items-center justify-center bg-gradient-to-tr from-[#121315] to-[#1e1f24] border border-[#26282e] p-6 rounded-3xl relative overflow-hidden shadow-2xl flex-1 w-full text-center column-3d-container cursor-pointer transition-all"
+                >
+                  <div className="absolute inset-0 bg-radial-gradient from-[#FF9F0A]/5 to-transparent opacity-35 pointer-events-none" />
+                  <div className="w-16 h-16 bg-gradient-to-tr from-[#FFD60A] via-[#FF9F0A] to-[#FFB340] rounded-full border-2 border-black flex flex-col items-center justify-center shadow-lg shadow-[#FF9F0A]/15 animate-pulse select-none">
+                    <Award className="w-7 h-7 text-black filter drop-shadow-md" />
+                    <span className="text-base font-mono font-black text-black -mt-1">{totalMedals}</span>
+                  </div>
                 </div>
-                <h3 className="text-base font-extrabold text-white">Medallas Ganadas</h3>
-                <p className="text-xs text-zinc-400 mt-1">Has completado exitosamente {totalMedals} {totalMedals === 1 ? 'tablero' : 'tableros'}</p>
+
+                {/* 2. Global Tasks and XP stats Card */}
+                {(() => {
+                  let completed = 0;
+                  let total = 0;
+                  sheets.forEach(sheet => {
+                    const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
+                    completed += stats.completed;
+                    total += stats.total;
+                  });
+
+                  return (
+                    <div 
+                      onMouseMove={handleGeneric3DMove}
+                      onMouseLeave={handleGeneric3DLeave}
+                      onTouchMove={handleGeneric3DMove}
+                      onTouchEnd={handleGeneric3DLeave}
+                      className="flex flex-col justify-center bg-gradient-to-tr from-[#121315] to-[#1e1f24] border border-[#26282e] p-6 rounded-3xl relative overflow-hidden shadow-2xl flex-1 w-full text-center gap-3 column-3d-container cursor-pointer transition-all"
+                    >
+                      <div className="absolute inset-0 bg-radial-gradient from-emerald-500/5 to-transparent opacity-35 pointer-events-none" />
+                      
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="bg-black/40 border border-zinc-800/60 p-2.5 rounded-2xl flex flex-col items-center">
+                          <span className="text-[8px] font-mono font-bold text-amber-400 uppercase tracking-widest">XP Total</span>
+                          <span className="text-base sm:text-lg font-mono font-black text-[#FF9F0A] mt-1">{completed} XP</span>
+                        </div>
+                        <div className="bg-black/40 border border-zinc-800/60 p-2.5 rounded-2xl flex flex-col items-center">
+                          <span className="text-[8px] font-mono font-bold text-zinc-450 uppercase tracking-widest">Tareas Totales</span>
+                          <span className="text-base sm:text-lg font-mono font-black text-zinc-300 mt-1">{total}</span>
+                        </div>
+                      </div>
+                      
+                      <p className="text-[10px] text-zinc-500 font-sans leading-none">Rendimiento consolidado en tiempo real</p>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* List of completed sheets */}
@@ -2913,7 +2971,11 @@ export default function App() {
                           <div 
                             key={sheet.id}
                             id={`achievements-sheet-item-${idx}`}
-                            className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-zinc-900/35 border transition-all group shadow-md gap-3 relative overflow-hidden ${isFocused ? 'border-[#FF9F0A] ring-2 ring-[#FF9F0A] ring-offset-1 ring-offset-black scale-[1.01] shadow-[0_0_15px_rgba(255,159,10,0.35)] z-10' : 'border-amber-500/20 hover:border-amber-500/40'}`}
+                            onMouseMove={handleGeneric3DMove}
+                            onMouseLeave={handleGeneric3DLeave}
+                            onTouchMove={handleGeneric3DMove}
+                            onTouchEnd={handleGeneric3DLeave}
+                            className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-zinc-900/35 border transition-all group shadow-md gap-3 relative overflow-hidden column-3d-container cursor-pointer ${isFocused ? 'border-[#FF9F0A] ring-2 ring-[#FF9F0A] ring-offset-1 ring-offset-black scale-[1.01] shadow-[0_0_15px_rgba(255,159,10,0.35)] z-10' : 'border-amber-500/20 hover:border-amber-500/40'}`}
                           >
                             <div className="absolute inset-0 bg-gradient-to-r from-amber-500/0 via-amber-500/[0.02] to-amber-500/0 pointer-events-none" />
                             
@@ -2931,7 +2993,7 @@ export default function App() {
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-3 w-full sm:w-auto shrink-0 justify-end">
+                            <div className="flex items-center gap-3 w-full sm:w-auto shrink-0 justify-end" onClick={(e) => e.stopPropagation()}>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -3208,11 +3270,6 @@ export default function App() {
                           <span className={`text-sm font-bold truncate ${isActive ? 'text-white' : 'text-zinc-200'}`}>
                             {sheet.title}
                           </span>
-                          {isCompleted && (
-                            <span className="text-[9px] font-bold text-amber-400 bg-amber-950/60 border border-amber-500/30 px-1.5 py-0.5 rounded">
-                              Completada
-                            </span>
-                          )}
                         </div>
                         <div className="text-[11px] text-zinc-400 font-mono">
                           {stats.total} {stats.total === 1 ? 'tarea' : 'tareas'} · {stats.completed} listas
@@ -3313,6 +3370,9 @@ export default function App() {
                       e.preventDefault();
                       if (soundEnabled) playPop();
                       setEditingTask(null);
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleEditTask(e);
                     }
                   }}
                   maxLength={150}
@@ -3409,6 +3469,13 @@ export default function App() {
                     if (e.key === 'ArrowDown') {
                       e.preventDefault();
                       document.getElementById('task-description-field')?.focus();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      if (soundEnabled) playPop();
+                      setShowAddTask(false);
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddTask(e);
                     }
                   }}
                   maxLength={150}
@@ -3431,6 +3498,13 @@ export default function App() {
                     if (e.key === 'ArrowUp') {
                       e.preventDefault();
                       document.getElementById('task-title-field')?.focus();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      if (soundEnabled) playPop();
+                      setShowAddTask(false);
+                    } else if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleAddTask(e);
                     }
                   }}
                   maxLength={1000}
@@ -3713,32 +3787,16 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isFirstInCol 
         transform: `translateX(${dragOffset}px) rotate(${dragOffset * 0.04}deg) perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
         transition: isDraggingCard.current ? 'none' : 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
         cursor: isDraggingCard.current ? 'grabbing' : 'grab',
-        borderColor: isSelected ? '#FF9F0A' : isKeyboardFocused ? '#FF9F0A' : `${cardVibrantColor}B5`,
-        backgroundColor: isSelected ? 'rgba(255, 159, 10, 0.15)' : isKeyboardFocused ? `${cardVibrantColor}55` : `${cardVibrantColor}35`,
-        boxShadow: isSelected
-          ? `0 0 25px rgba(255,159,10,0.5), inset 0 0 20px rgba(255,159,10,0.2)`
-          : isKeyboardFocused 
-            ? `0 0 35px rgba(255,159,10,0.85), inset 0 0 25px ${cardVibrantColor}60, 0 0 15px rgba(255,159,10,0.4)`
-            : `0 12px 30px -4px ${cardVibrantColor}70, inset 0 0 20px ${cardVibrantColor}25, 0 0 15px ${cardVibrantColor}1F`
+        borderColor: isKeyboardFocused ? '#FF9F0A' : `${cardVibrantColor}B5`,
+        backgroundColor: isKeyboardFocused ? `${cardVibrantColor}55` : `${cardVibrantColor}35`,
+        boxShadow: isKeyboardFocused 
+          ? `0 0 35px rgba(255,159,10,0.85), inset 0 0 25px ${cardVibrantColor}60, 0 0 15px rgba(255,159,10,0.4)`
+          : `0 12px 30px -4px ${cardVibrantColor}70, inset 0 0 20px ${cardVibrantColor}25, 0 0 15px ${cardVibrantColor}1F`
       }}
-      className={`task-card-3d p-2.5 sm:p-3 rounded-xl border hover:border-white/80 shadow-md transform group flex flex-col gap-1.5 relative select-none touch-pan-y min-h-[65px] h-auto flex-shrink-0 ${(isSelected || isKeyboardFocused) ? 'ring-2 ring-[#FF9F0A] ring-offset-2 ring-offset-black scale-[1.03] z-10 animate-pulse' : ''}`}
+      className={`task-card-3d p-3.5 sm:p-4 rounded-2xl border hover:border-white/80 shadow-md transform group flex flex-col gap-1.5 relative select-none touch-pan-y min-h-[65px] h-auto flex-shrink-0 ${isKeyboardFocused ? 'ring-2 ring-[#FF9F0A] ring-offset-2 ring-offset-black scale-[1.03] z-10 animate-pulse' : ''}`}
     >
       
       <div className="flex items-start justify-between gap-2.5 w-full">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (onToggleSelect) onToggleSelect();
-          }}
-          className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all shrink-0 mt-0.5 cursor-pointer ${
-            isSelected 
-              ? 'bg-[#FF9F0A] border-[#FF9F0A] text-black shadow-[0_0_8px_rgba(255,159,10,0.5)]' 
-              : 'border-zinc-700 hover:border-zinc-500 bg-black/40'
-          }`}
-          title={isSelected ? "Deseleccionar pendiente" : "Seleccionar pendiente"}
-        >
-          {isSelected && <Check className="w-2.5 h-2.5 stroke-[4] text-black" />}
-        </button>
         <h4 className="font-extrabold text-xs sm:text-sm text-zinc-100 transition-colors leading-tight tracking-wide break-words whitespace-normal py-0.5 max-w-full text-left flex-1">
           {task.title}
         </h4>
@@ -3754,73 +3812,6 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isFirstInCol 
           {task.description}
         </p>
       )}
-
-      {/* Action Footer */}
-      <div className="flex items-center justify-end border-t border-slate-800/40 pt-1.5 mt-0.5 gap-1.5">
-        
-        {/* Edit task pencil */}
-        <button
-          onClick={onEdit}
-          className="p-1 text-slate-500 hover:text-amber-400 hover:bg-amber-950/30 rounded transition-all cursor-pointer"
-          title="Editar pendiente"
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Delete task */}
-        <button
-          onClick={() => onDelete(task)}
-          className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-950/20 rounded transition-all cursor-pointer"
-          title="Eliminar"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Reorder Up */}
-        <button
-          onClick={(e) => { e.stopPropagation(); onReorder(task, 'up'); }}
-          disabled={isFirstInCol}
-          className="p-1 text-slate-400 hover:text-white bg-slate-800 disabled:bg-slate-900/40 hover:bg-slate-700 border border-slate-700/50 rounded transition-all cursor-pointer disabled:opacity-25"
-          title="Subir prioridad"
-        >
-          <ChevronUp className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Reorder Down */}
-        <button
-          onClick={(e) => { e.stopPropagation(); onReorder(task, 'down'); }}
-          disabled={isLastInCol}
-          className="p-1 text-slate-400 hover:text-white bg-slate-800 disabled:bg-slate-900/40 hover:bg-slate-700 border border-slate-700/50 rounded transition-all cursor-pointer disabled:opacity-25"
-          title="Bajar prioridad"
-        >
-          <ChevronDown className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Move left */}
-        {currentIndex > 0 && (
-          <button
-            onClick={() => onMove(task, 'left')}
-            className="p-1 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700/50 rounded transition-all cursor-pointer"
-            title="Mover atrás"
-          >
-            <ArrowLeft className="w-3 h-3" />
-          </button>
-        )}
-
-        {/* Move right */}
-        {currentIndex < activeColumns.length - 1 && (
-          <button
-            onClick={() => onMove(task, 'right')}
-            className="p-1 text-black bg-[#FF9F0A] hover:bg-[#FFB340] font-black rounded transition-all flex items-center gap-0.5 cursor-pointer shadow-sm"
-            title={currentIndex === activeColumns.length - 2 ? "Completar" : "Avanzar"}
-          >
-            <span className="text-[9px] font-black px-0.5">
-              {currentIndex === activeColumns.length - 2 ? 'Listo!' : 'Avanzar'}
-            </span>
-            {currentIndex === activeColumns.length - 2 ? <Check className="w-2.5 h-2.5 stroke-[3]" /> : <ArrowRight className="w-2.5 h-2.5 stroke-[3]" />}
-          </button>
-        )}
-      </div>
 
       {task.column === lastColId && (
         <div className="absolute top-0 right-0 w-10 h-10 overflow-hidden pointer-events-none">
@@ -3888,10 +3879,10 @@ function InteractiveCongrats3D({ taskTitle, points, onClose }: InteractiveCongra
     particles.current = pList;
   }, []);
 
-  // Listen to Enter key to dismiss and return to the feed
+  // Listen to Space or Enter key to dismiss and return to the feed
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         onClose();
       }
@@ -4230,10 +4221,6 @@ function SheetTab({
         className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-t-xl transition-all border-t border-x cursor-pointer whitespace-nowrap ${isActive ? 'bg-[#0c0c0e] border-zinc-800 text-amber-400 font-bold -mb-px shadow-[0_-4px_12px_rgba(0,0,0,0.3)]' : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'} ${isKeyboardFocused ? 'ring-2 ring-[#FF9F0A] ring-offset-1 ring-offset-black animate-pulse shadow-[0_-4px_15px_rgba(255,159,10,0.4)] bg-[#1e1507]' : ''}`}
       >
         <span className="font-sans font-semibold text-xs sm:text-sm">{sheet.title}</span>
-
-        {isCompleted && (
-          <span className="text-[10px] font-bold text-emerald-400 shrink-0" title="¡Medalla ganada!">Completado</span>
-        )}
 
         {/* Complete sheet check button */}
         {isActive && (
