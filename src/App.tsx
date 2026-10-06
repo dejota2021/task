@@ -412,6 +412,24 @@ export default function App() {
     setFocusedTaskIndex(0);
   }, [activeSheetId]);
 
+  // Keep focusedTaskIndex in bounds when tasks, column, view mode or search filter changes
+  useEffect(() => {
+    if (keyboardFocusArea === 'board') {
+      const cols = activeSheet?.columns || DEFAULT_COLUMNS;
+      const targetColId = cols[focusedColumnIndex]?.id;
+      if (targetColId) {
+        const colTasks = tasks
+          .filter(t => t.column === targetColId)
+          .filter(t => !boardFilterQuery || t.title.toLowerCase().includes(boardFilterQuery.toLowerCase()) || t.description?.toLowerCase().includes(boardFilterQuery.toLowerCase()));
+        if (colTasks.length === 0) {
+          setFocusedTaskIndex(0);
+        } else if (focusedTaskIndex >= colTasks.length) {
+          setFocusedTaskIndex(colTasks.length - 1);
+        }
+      }
+    }
+  }, [tasks, focusedColumnIndex, keyboardFocusArea, boardFilterQuery, activeSheet, focusedTaskIndex]);
+
   // Scroll active achievements items into view automatically
   useEffect(() => {
     if (activeView === 'analytics') {
@@ -629,6 +647,24 @@ export default function App() {
           if (focusedTaskIndex < colTasks.length - 1) {
             setFocusedTaskIndex(focusedTaskIndex + 1);
           }
+        }
+      }
+
+      // Enter or Space key to enter edit task modal of focused task card
+      if ((e.key === 'Enter' || e.key === ' ') && !isTyping && keyboardFocusArea === 'board' && activeView === 'board') {
+        const cols = activeSheet?.columns || DEFAULT_COLUMNS;
+        const targetColId = cols[focusedColumnIndex]?.id;
+        const colTasks = tasks
+          .filter(t => t.column === targetColId)
+          .filter(t => !boardFilterQuery || t.title.toLowerCase().includes(boardFilterQuery.toLowerCase()) || t.description?.toLowerCase().includes(boardFilterQuery.toLowerCase()));
+        const focusedTask = colTasks[focusedTaskIndex];
+        if (focusedTask) {
+          e.preventDefault();
+          if (soundEnabled) playPop();
+          setEditingTask(focusedTask);
+          setEditTaskTitle(focusedTask.title);
+          setEditTaskDesc(focusedTask.description || '');
+          return;
         }
       }
 
@@ -1741,9 +1777,13 @@ export default function App() {
     }
   };
 
-  // Move task up/down within its column to change order
+  // Move task up/down within its column to change order (Fully consistent with active search filters!)
   const handleMoveTaskOrder = async (task: Task, direction: 'up' | 'down') => {
-    const colTasks = tasks.filter(t => t.column === task.column);
+    // Compute the exact same visible list of tasks in this column as seen in the UI
+    const colTasks = tasks
+      .filter(t => t.column === task.column)
+      .filter(t => !boardFilterQuery || t.title.toLowerCase().includes(boardFilterQuery.toLowerCase()) || t.description?.toLowerCase().includes(boardFilterQuery.toLowerCase()));
+
     const index = colTasks.findIndex(t => t.id === task.id);
     if (index === -1) return;
 
@@ -1758,22 +1798,28 @@ export default function App() {
 
     if (soundEnabled) playPop();
 
-    // Re-assign order based on current list index so we have explicit numeric ordering
-    const sortedColTasks = [...colTasks];
-    sortedColTasks.forEach((t, idx) => {
+    // Re-assign order based on visible index relative to visible adjacent cards
+    const taskA = colTasks[index];
+    const taskB = colTasks[targetIndex];
+
+    // Build complete unfiltered sequence for the column first to guarantee clean order integers
+    const unfilteredColTasks = tasks.filter(t => t.column === task.column);
+    unfilteredColTasks.forEach((t, idx) => {
       t.order = idx;
     });
 
-    // Swap the order values
-    const taskA = sortedColTasks[index];
-    const taskB = sortedColTasks[targetIndex];
-    const tempOrder = taskA.order ?? 0;
-    taskA.order = taskB.order ?? 0;
-    taskB.order = tempOrder;
+    const unfilteredTaskA = unfilteredColTasks.find(t => t.id === taskA.id);
+    const unfilteredTaskB = unfilteredColTasks.find(t => t.id === taskB.id);
 
-    // Update the main tasks list with updated orders
+    if (unfilteredTaskA && unfilteredTaskB) {
+      const tempOrder = unfilteredTaskA.order ?? 0;
+      unfilteredTaskA.order = unfilteredTaskB.order ?? 0;
+      unfilteredTaskB.order = tempOrder;
+    }
+
+    // Update main tasks list with newly swapped order fields
     const updatedTasks = tasks.map(t => {
-      const match = sortedColTasks.find(ct => ct.id === t.id);
+      const match = unfilteredColTasks.find(ct => ct.id === t.id);
       if (match) {
         return { ...t, order: match.order };
       }
@@ -1788,10 +1834,12 @@ export default function App() {
     if (isOfflineFallback) return;
 
     try {
-      const docRefA = doc(db, 'boards', activeSheetId, 'tasks', taskA.id);
-      const docRefB = doc(db, 'boards', activeSheetId, 'tasks', taskB.id);
-      await updateDoc(docRefA, { order: taskA.order });
-      await updateDoc(docRefB, { order: taskB.order });
+      if (unfilteredTaskA && unfilteredTaskB) {
+        const docRefA = doc(db, 'boards', activeSheetId, 'tasks', unfilteredTaskA.id);
+        const docRefB = doc(db, 'boards', activeSheetId, 'tasks', unfilteredTaskB.id);
+        await updateDoc(docRefA, { order: unfilteredTaskA.order });
+        await updateDoc(docRefB, { order: unfilteredTaskB.order });
+      }
     } catch (err) {
       console.warn("Firebase task reorder failed:", err);
     }

@@ -1,5 +1,11 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from 'firebase/firestore';
+import { 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager,
+  enableNetwork,
+  disableNetwork 
+} from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -8,8 +14,25 @@ const app = initializeApp(firebaseConfig);
 
 // CRITICAL: Must use firestoreDatabaseId for custom db setup
 const databaseId = (firebaseConfig as any).firestoreDatabaseId;
-export const db = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
+
+// Initialize Firestore with robust multi-tab offline cache enabled by default
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+}, databaseId || '(default)');
+
 export const auth = getAuth(app);
+
+// Monitor connection state to force immediate synchronization on network connection
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    enableNetwork(db).catch(err => console.warn("Error enabling Firestore network:", err));
+  });
+  window.addEventListener('offline', () => {
+    disableNetwork(db).catch(err => console.warn("Error disabling Firestore network:", err));
+  });
+}
 
 // Compliant with Firestore Error Tracking specification in Firebase integration skill
 export enum OperationType {
