@@ -50,7 +50,8 @@ import {
   Clock,
   PieChart,
   Undo2,
-  Redo2
+  Redo2,
+  Zap
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from './firebase';
 import { playPop, playWoosh, playSuccess, playFanfare, playMegaCelebration } from './sound';
@@ -405,6 +406,12 @@ export default function App() {
     }
   }, [activeView]);
 
+  // Reset board focus index when active sheet changes to avoid out-of-bounds errors on other boards
+  useEffect(() => {
+    setFocusedColumnIndex(0);
+    setFocusedTaskIndex(0);
+  }, [activeSheetId]);
+
   // Scroll active achievements items into view automatically
   useEffect(() => {
     if (activeView === 'analytics') {
@@ -439,12 +446,8 @@ export default function App() {
 
       // Shortcuts for Achievements page (activeView === 'analytics')
       if (activeView === 'analytics' && !isTyping) {
-        const incompleteSheets = sheets.filter(s => {
-          const stats = sheetStats[s.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
-          return !(stats.total > 0 && stats.pending === 0 && stats.progress === 0);
-        });
         const completedSheets = sheets.filter(s => s.completed);
-        const totalFocusable = incompleteSheets.length + completedSheets.length;
+        const totalFocusable = completedSheets.length;
 
         if (e.key === 'ArrowDown') {
           e.preventDefault();
@@ -469,16 +472,8 @@ export default function App() {
         if (e.key === 'Enter') {
           e.preventDefault();
           const focusIdx = analyticsFocusedIndex;
-          if (focusIdx >= 0 && focusIdx < incompleteSheets.length) {
-            const sheet = incompleteSheets[focusIdx];
-            if (soundEnabled) playWoosh();
-            setActiveSheetId(sheet.id);
-            setActiveView('board');
-            setKeyboardFocusArea('board');
-            setFocusedColumnIndex(0);
-            setFocusedTaskIndex(0);
-          } else if (focusIdx >= incompleteSheets.length && focusIdx < totalFocusable) {
-            const sheet = completedSheets[focusIdx - incompleteSheets.length];
+          if (focusIdx >= 0 && focusIdx < completedSheets.length) {
+            const sheet = completedSheets[focusIdx];
             if (soundEnabled) playSuccess();
             handleRestoreSheet(sheet.id);
           }
@@ -509,11 +504,8 @@ export default function App() {
         handleUndo();
       }
 
-      // Shortcut [Ctrl/Cmd + Y] or [Ctrl/Cmd + Shift + Z] for Redo
-      if (
-        ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) ||
-        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'z' || e.key === 'Z'))
-      ) {
+      // Shortcut [Ctrl/Cmd + X] for Redo (Restaurar con Ctrl+Z y Rehacer con Ctrl+X)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'x' || e.key === 'X') && !isTyping) {
         e.preventDefault();
         handleRedo();
       }
@@ -679,11 +671,18 @@ export default function App() {
         setIsSearchPaletteOpen(true);
       }
 
-      // Shortcut [Tab] to toggle view between 'board' and 'analytics'
-      if (e.key === 'Tab' && !isTyping) {
+      // Shortcut [Tab] to toggle view between 'board' and 'analytics' (prevent when Add Task modal is active)
+      if (e.key === 'Tab' && !isTyping && !showAddTask) {
         e.preventDefault();
         if (soundEnabled) playPop();
         setActiveView(prev => prev === 'board' ? 'analytics' : 'board');
+      }
+
+      // Shortcut [Ctrl/Cmd + A] to trigger Add Task modal
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'A' || e.key === 'a') && !isTyping) {
+        e.preventDefault();
+        if (soundEnabled) playPop();
+        setShowAddTask(true);
       }
 
       // Shortcut [Shift + N] to create a new sheet
@@ -692,11 +691,26 @@ export default function App() {
         if (soundEnabled) playPop();
         setShowAddSheetInput(true);
       }
+
+      // Esc key to close Add Task modal (bypassing isTyping restriction)
+      if (e.key === 'Escape' && showAddTask) {
+        e.preventDefault();
+        if (soundEnabled) playPop();
+        setShowAddTask(false);
+      }
+
+      // Shortcut [Shift + C] to complete the active sheet
+      if (e.shiftKey && (e.key === 'C' || e.key === 'c') && !isTyping) {
+        e.preventDefault();
+        if (activeSheetId) {
+          handleCompleteSheet(activeSheetId);
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [soundEnabled, sheets, activeSheetId, keyboardFocusArea, focusedColumnIndex, focusedTaskIndex, tasks, boardFilterQuery, activeView, analyticsFocusedIndex, sheetStats]);
+  }, [soundEnabled, sheets, activeSheetId, keyboardFocusArea, focusedColumnIndex, focusedTaskIndex, tasks, boardFilterQuery, activeView, analyticsFocusedIndex, sheetStats, showAddTask]);
 
   // Update slide transition direction based on tab index movement
   useEffect(() => {
@@ -2141,7 +2155,7 @@ export default function App() {
                 onClick={handleRedo}
                 disabled={redoStack.length === 0}
                 className="p-1.5 rounded-lg text-zinc-400 hover:text-[#FF9F0A] disabled:opacity-20 disabled:hover:text-zinc-400 cursor-pointer transition-all flex items-center justify-center"
-                title="Hacer (Ctrl+Y)"
+                title="Rehacer (Ctrl+X)"
               >
                 <Redo2 className="w-3.5 h-3.5" />
               </button>
@@ -2238,78 +2252,6 @@ export default function App() {
         ) : (
           <>
             <div className="px-4 sm:px-6 md:px-8 flex flex-col gap-5">
-              {/* Gamification Banner & Stat Indicators (Modeled after reference dark UI) */}
-            <div 
-              onMouseMove={handleGeneric3DMove}
-              onMouseLeave={handleGeneric3DLeave}
-              onTouchMove={handleGeneric3DMove}
-              onTouchEnd={handleGeneric3DLeave}
-              className="bg-[#18191c] p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-[#26282e] shadow-xl column-3d-container"
-            >
-              <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
-                
-                {/* Stat 1: Mayor Rendimiento / XP */}
-                <div 
-                  onClick={() => playPop()}
-                  onMouseMove={handleGeneric3DMove}
-                  onMouseLeave={handleGeneric3DLeave}
-                  onTouchMove={handleGeneric3DMove}
-                  onTouchEnd={handleGeneric3DLeave}
-                  className="bg-[#121315] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-[#222428] flex flex-col justify-between column-3d-container cursor-pointer"
-                >
-                  <div className="text-[9px] sm:text-[10px] text-zinc-400 font-bold uppercase tracking-wider truncate">
-                    XP Total
-                  </div>
-                  <div className="text-base sm:text-2xl font-mono font-black text-[#FF9F0A] tabular-nums my-0.5">
-                    {totalXPVal} <span className="text-[10px] font-sans font-normal text-zinc-500">XP</span>
-                  </div>
-                  <div className="text-[9px] text-zinc-500 truncate hidden sm:block">
-                    Puntos acumulados
-                  </div>
-                </div>
-
-                {/* Stat 2: Tasa de Eficiencia */}
-                <div 
-                  onClick={() => playPop()}
-                  onMouseMove={handleGeneric3DMove}
-                  onMouseLeave={handleGeneric3DLeave}
-                  onTouchMove={handleGeneric3DMove}
-                  onTouchEnd={handleGeneric3DLeave}
-                  className="bg-[#121315] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-[#222428] flex flex-col justify-between column-3d-container cursor-pointer"
-                >
-                  <div className="text-[9px] sm:text-[10px] text-zinc-400 font-bold uppercase tracking-wider truncate">
-                    Efectividad
-                  </div>
-                  <div className="text-base sm:text-2xl font-mono font-black text-[#30D158] tabular-nums my-0.5">
-                    {totalTasks > 0 ? Math.round((completedTasksCount / totalTasks) * 100) : 0}%
-                  </div>
-                  <div className="text-[9px] text-zinc-500 truncate hidden sm:block">
-                    del total de tareas
-                  </div>
-                </div>
-
-                {/* Stat 3: Movimientos con Tareas */}
-                <div 
-                  onClick={() => playPop()}
-                  onMouseMove={handleGeneric3DMove}
-                  onMouseLeave={handleGeneric3DLeave}
-                  onTouchMove={handleGeneric3DMove}
-                  onTouchEnd={handleGeneric3DLeave}
-                  className="bg-[#121315] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-[#222428] flex flex-col justify-between column-3d-container cursor-pointer"
-                >
-                  <div className="text-[9px] sm:text-[10px] text-zinc-400 font-bold uppercase tracking-wider truncate">
-                    Tareas Activas
-                  </div>
-                  <div className="text-base sm:text-2xl font-mono font-black text-white tabular-nums my-0.5">
-                    {tasks.length}
-                  </div>
-                  <div className="text-[9px] text-zinc-500 truncate hidden sm:block">
-                    {activeColumns.length} columnas
-                  </div>
-                </div>
-
-              </div>
-            </div>
 
         {/* MOBILE DEDICATED SHEET SELECTOR BAR (Optimized for Mobile) */}
         <div className="md:hidden flex flex-col gap-2 p-2.5 bg-[#18191c] border border-[#26282e] rounded-2xl shadow-lg">
@@ -2838,7 +2780,7 @@ export default function App() {
               </div>
             </div>
           ) : (
-            /* DYNAMIC "LOGROS" VIEW (Reconstructed according to the user's instructions) */
+            /* DYNAMIC "LOGROS" VIEW (Reconstructed with a Unified Analytics Dashboard and Mascot) */
             <div key={`${activeSheetId}_${slideDirection}`} className={`flex flex-col gap-6 px-4 sm:px-6 md:px-8 max-w-full mx-auto ${slideDirection === 'right' ? 'animate-slide-right' : 'animate-slide-left'}`}>
               
               {/* Custom CSS Animation Style for Mascot Hand Wave */}
@@ -2864,10 +2806,10 @@ export default function App() {
               <div className="flex flex-col gap-1">
                 <h2 className="text-base sm:text-xl font-display font-extrabold text-white tracking-wider uppercase flex items-center gap-2">
                   <Award className="w-5 h-5 text-[#FF9F0A] animate-pulse" />
-                  <span>LOGROS & COMPROMISOS</span>
+                  <span>LOGROS & ANALÍTICAS UNIFICADAS</span>
                 </h2>
                 <p className="text-xs text-zinc-400 font-sans">
-                  Monitorea tus medallas ganadas y el progreso global de todas tus hojas de trabajo activas
+                  Monitorea tus medallas, rendimiento global, efectividad y el estado completo de tus proyectos en tiempo real
                 </p>
               </div>
 
@@ -2927,64 +2869,34 @@ export default function App() {
                       <span className="text-[8px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full uppercase tracking-widest animate-pulse">Compañero 3D</span>
                     </div>
                     <p className="text-zinc-300 text-xs mt-2.5 leading-relaxed font-medium">
-                      ¡Hola! Te doy la bienvenida a tu centro de **Logros**. Actualmente posees un total de <strong className="text-[#FF9F0A] font-black">{totalMedals} {totalMedals === 1 ? 'hoja completada' : 'hojas completadas'}</strong>. He archivado y ocultado tus hojas listas de este listado para que enfoques tu energía únicamente en los compromisos pendientes.
+                      ¡Hola! Te doy la bienvenida a tu centro de **Estadísticas unificadas**. Aquí consolidamos todo tu progreso e historial. He ocultado y archivado tus hojas listas para mantener tu espacio de trabajo totalmente despejado y productivo. ¡Buen trabajo!
                     </p>
                     <div className="mt-3.5 flex flex-wrap gap-2 justify-center md:justify-start">
                       <span className="text-[9px] font-mono font-bold text-zinc-400 bg-zinc-950 border border-zinc-800 px-2.5 py-1 rounded-lg">
                         Mascota: Animada y Activa 🤖
                       </span>
-                      <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
-                        Progreso: ¡Sigue cumpliendo metas! 🏆
+                      <span className="text-[9px] font-mono font-bold text-[#FF9F0A] bg-[#FF9F0A]/10 border border-[#FF9F0A]/20 px-2.5 py-1 rounded-lg">
+                        Métricas consolidadas en tiempo real 📈
                       </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Global Sheets Completion Progress Bar */}
+                {/* UNIFIED CYBERPUNK ANALYTICS DASHBOARD */}
                 {(() => {
+                  const completedSheets = sheets.filter(s => s.completed);
                   const totalSheetsCount = sheets.length;
-                  const completedSheetsCount = sheets.filter(s => s.completed).length;
+                  const completedSheetsCount = completedSheets.length;
+                  const activeSheetsCount = sheets.filter(s => !s.completed).length;
                   const sheetsPercent = totalSheetsCount > 0 ? Math.round((completedSheetsCount / totalSheetsCount) * 100) : 0;
 
-                  return (
-                    <div className="bg-gradient-to-r from-[#121315] to-[#16171c] p-4 sm:p-5 rounded-2xl border border-amber-500/20 shadow-lg relative overflow-hidden flex flex-col gap-3">
-                      <div className="absolute top-0 right-0 w-24 h-24 bg-[#FF9F0A]/5 rounded-full blur-2xl pointer-events-none" />
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Award className="w-4 h-4 text-[#FF9F0A]" />
-                          <span className="text-xs sm:text-sm font-extrabold text-white uppercase tracking-wider">Avance de Hojas Completadas</span>
-                        </div>
-                        <span className="text-xs font-mono font-black text-[#FF9F0A] bg-[#FF9F0A]/10 border border-[#FF9F0A]/35 px-2.5 py-1 rounded-full">{sheetsPercent}% Completado</span>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="h-3 bg-zinc-950 border border-zinc-900 rounded-full flex-1 overflow-hidden relative">
-                          <div 
-                            className="h-full rounded-full transition-all duration-1000 bg-gradient-to-r from-[#FFD60A] via-[#FF9F0A] to-amber-500 shadow-[0_0_12px_rgba(255,159,10,0.4)]" 
-                            style={{ width: `${sheetsPercent}%` }}
-                          />
-                        </div>
-                        <span className="text-[11px] font-mono font-black text-zinc-300 whitespace-nowrap">{completedSheetsCount} de {totalSheetsCount} {totalSheetsCount === 1 ? 'hoja' : 'hojas'}</span>
-                      </div>
-                      <p className="text-[10px] text-zinc-550 font-mono text-left">
-                        Representa el porcentaje de tableros archivados como completados con éxito del total de tus proyectos creados.
-                      </p>
-                    </div>
-                  );
-                })()}
-
-                {/* 2. Global statistics overview across only active (incomplete) sheets */}
-                {(() => {
-                  const incompleteSheets = sheets.filter(s => {
-                    const stats = sheetStats[s.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
-                    return !(stats.total > 0 && stats.pending === 0 && stats.progress === 0);
-                  });
-
-                  const incompleteSheetsStats = (() => {
+                  // Aggregate tasks stats across all projects (active and completed)
+                  const globalStats = (() => {
                     let completed = 0;
                     let pending = 0;
                     let progress = 0;
                     let total = 0;
-                    incompleteSheets.forEach(sheet => {
+                    sheets.forEach(sheet => {
                       const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
                       completed += stats.completed;
                       pending += stats.pending;
@@ -2993,140 +2905,146 @@ export default function App() {
                     });
                     return { completed, pending, progress, total };
                   })();
+                  const globalEffectiveness = globalStats.total > 0 ? Math.round((globalStats.completed / globalStats.total) * 100) : 0;
 
                   return (
-                    <div className="flex flex-col gap-3">
-                      <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">
-                        Conteo Global de Pendientes (Hojas Activas)
-                      </div>
+                    <div className="flex flex-col gap-6">
                       
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                      {/* Metric Indicator Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         
-                        {/* Metric: Pendientes */}
-                        <div className="bg-[#121315] p-4 rounded-2xl border border-[#222428] flex items-center justify-between shadow-inner">
-                          <div>
-                            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Total Pendientes</span>
-                            <span className="text-xl sm:text-2xl font-mono font-black text-[#FF9F0A] tabular-nums mt-0.5 block">
-                              {incompleteSheetsStats.pending}
+                        {/* CARD 1: Rendimiento Global (XP Total) */}
+                        <div className="bg-[#121315] p-5 rounded-2xl border border-amber-500/20 shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[120px] transition-all hover:border-amber-500/40">
+                          <div className="absolute -top-6 -right-6 w-16 h-16 bg-[#FF9F0A]/5 rounded-full blur-xl pointer-events-none" />
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">XP Total Acumulado</span>
+                            <span className="p-2 bg-[#FF9F0A]/10 border border-[#FF9F0A]/20 rounded-xl text-[#FF9F0A]">
+                              <Zap className="w-4 h-4 animate-pulse" />
                             </span>
                           </div>
-                          <div className="p-2.5 bg-[#FF9F0A]/10 border border-[#FF9F0A]/20 rounded-xl text-[#FF9F0A]">
-                            <Clock className="w-4 h-4" />
-                          </div>
-                        </div>
-
-                        {/* Metric: En Proceso */}
-                        <div className="bg-[#121315] p-4 rounded-2xl border border-[#222428] flex items-center justify-between shadow-inner">
-                          <div>
-                            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">En Proceso</span>
-                            <span className="text-xl sm:text-2xl font-mono font-black text-[#64D2FF] tabular-nums mt-0.5 block">
-                              {incompleteSheetsStats.progress}
-                            </span>
-                          </div>
-                          <div className="p-2.5 bg-[#64D2FF]/10 border border-[#64D2FF]/20 rounded-xl text-[#64D2FF]">
-                            <TrendingUp className="w-4 h-4" />
-                          </div>
-                        </div>
-
-                        {/* Metric: Completados */}
-                        <div className="bg-[#121315] p-4 rounded-2xl border border-[#222428] flex items-center justify-between shadow-inner">
-                          <div>
-                            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Completados</span>
-                            <span className="text-xl sm:text-2xl font-mono font-black text-[#30D158] tabular-nums mt-0.5 block">
-                              {incompleteSheetsStats.completed}
-                            </span>
-                          </div>
-                          <div className="p-2.5 bg-[#30D158]/10 border border-[#30D158]/20 rounded-xl text-[#30D158]">
-                            <CheckCircle2 className="w-4 h-4" />
-                          </div>
-                        </div>
-
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* 3. Progressive list of active sheets (completed ones are fully hidden) */}
-                {(() => {
-                  const incompleteSheets = sheets.filter(s => {
-                    const stats = sheetStats[s.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
-                    return !(stats.total > 0 && stats.pending === 0 && stats.progress === 0);
-                  });
-
-                  return (
-                    <div className="flex flex-col gap-3.5 pt-2">
-                      <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">
-                        Progreso de Hojas Activas ({incompleteSheets.length})
-                      </div>
-                      
-                      <div className="flex flex-col gap-3">
-                        {incompleteSheets.map((sheet, idx) => {
-                          const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
-                          const percent = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
-                          
-                          const isFocused = activeView === 'analytics' && analyticsFocusedIndex === idx;
-
-                          return (
-                            <div 
-                              key={sheet.id}
-                              id={`achievements-sheet-item-${idx}`}
-                              onClick={() => {
-                                if (soundEnabled) playPop();
-                                setActiveSheetId(sheet.id);
-                                setActiveView('board');
-                              }}
-                              className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-[#121315] border transition-all cursor-pointer group shadow-sm gap-3 ${isFocused ? 'border-[#FF9F0A] ring-2 ring-[#FF9F0A] ring-offset-1 ring-offset-black scale-[1.01] shadow-[0_0_15px_rgba(255,159,10,0.35)]' : 'border-[#222428] hover:border-[#FF9F0A]/40'}`}
-                            >
-                              <div className="flex items-center gap-3">
-                                <Layers className="w-4.5 h-4.5 text-zinc-550 group-hover:text-[#FF9F0A] transition-colors" />
-                                <div>
-                                  <span className="text-xs sm:text-sm font-bold text-white group-hover:text-[#FF9F0A] transition-colors">
-                                    {sheet.title}
-                                  </span>
-                                  <span className="text-[10px] text-zinc-550 block font-mono mt-0.5">
-                                    {stats.completed}/{stats.total} completadas • {stats.pending} pendientes • {stats.progress} en proceso
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Progress bar */}
-                              <div className="flex items-center gap-3 w-full sm:w-48 shrink-0">
-                                <div className="h-2 bg-zinc-950 border border-zinc-900 rounded-full flex-1 overflow-hidden">
-                                  <div 
-                                    className="h-full rounded-full transition-all duration-700 bg-gradient-to-r from-[#FF9F0A] to-amber-500" 
-                                    style={{ width: `${percent}%` }}
-                                  />
-                                </div>
-                                <span className="text-[10px] font-mono font-black text-[#FF9F0A] w-8 text-right shrink-0">{percent}%</span>
-                              </div>
+                          <div className="mt-3">
+                            <div className="text-2xl sm:text-3xl font-mono font-black text-[#FF9F0A] tabular-nums leading-none">
+                              {globalStats.completed} <span className="text-xs font-sans font-normal text-zinc-500">XP</span>
                             </div>
-                          );
-                        })}
-
-                        {incompleteSheets.length === 0 && (
-                          <div className="py-10 text-center border border-dashed border-[#222428] rounded-2xl bg-[#121315]/40 flex flex-col items-center justify-center gap-2">
-                            <Sparkles className="w-6 h-6 text-[#FF9F0A] animate-spin" />
-                            <p className="text-xs text-zinc-400 font-bold font-mono">¡Has alcanzado la gloria máxima! 🏆</p>
-                            <p className="text-[10px] text-zinc-550 font-mono">Todas tus hojas de trabajo se encuentran 100% completadas.</p>
+                            <p className="text-[10px] text-zinc-550 mt-1 font-mono">
+                              Tareas terminadas en todas las hojas ({globalStats.completed} de {globalStats.total} totales)
+                            </p>
                           </div>
-                        )}
+                        </div>
+
+                        {/* CARD 2: Tasa de Efectividad */}
+                        <div className="bg-[#121315] p-5 rounded-2xl border border-emerald-500/20 shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[120px] transition-all hover:border-emerald-500/40">
+                          <div className="absolute -top-6 -right-6 w-16 h-16 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Eficiencia Global</span>
+                            <span className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-[#30D158]">
+                              <TrendingUp className="w-4 h-4" />
+                            </span>
+                          </div>
+                          <div className="mt-3">
+                            <div className="text-2xl sm:text-3xl font-mono font-black text-[#30D158] tabular-nums leading-none">
+                              {globalEffectiveness}%
+                            </div>
+                            <p className="text-[10px] text-zinc-550 mt-1 font-mono">
+                              Tasa global de efectividad y cumplimiento de tareas
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* CARD 3: Proyectos & Medallas */}
+                        <div className="bg-[#121315] p-5 rounded-2xl border border-blue-500/20 shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[120px] transition-all hover:border-blue-500/40">
+                          <div className="absolute -top-6 -right-6 w-16 h-16 bg-blue-500/5 rounded-full blur-xl pointer-events-none" />
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Tableros de Trabajo</span>
+                            <span className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-xl text-[#64D2FF]">
+                              <Layers className="w-4 h-4" />
+                            </span>
+                          </div>
+                          <div className="mt-3">
+                            <div className="text-2xl sm:text-3xl font-mono font-black text-[#64D2FF] tabular-nums leading-none">
+                              {totalSheetsCount} <span className="text-xs font-sans font-normal text-zinc-500">Hojas</span>
+                            </div>
+                            <p className="text-[10px] text-zinc-550 mt-1 font-mono">
+                              {activeSheetsCount} activas • {completedSheetsCount} completadas ({sheetsPercent}% de avance de hojas)
+                            </p>
+                          </div>
+                        </div>
+
                       </div>
+
+                      {/* Stacked Interactive Distribution Bar & Detailed Metrics */}
+                      <div className="bg-gradient-to-tr from-[#121315] to-[#15161c] p-5 sm:p-6 rounded-3xl border border-[#26282e] shadow-xl flex flex-col gap-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
+                            <BarChart3 className="w-4 h-4 text-[#FF9F0A]" />
+                            Distribución de Tareas en Hojas Activas & Completadas
+                          </span>
+                          <span className="text-[10px] font-mono text-zinc-500">Unificado</span>
+                        </div>
+
+                        {/* Visual segment progress bar */}
+                        <div className="h-4 bg-zinc-950 border border-zinc-900 rounded-full flex overflow-hidden w-full relative p-0.5">
+                          {globalStats.total > 0 ? (
+                            <>
+                              <div 
+                                style={{ width: `${(globalStats.completed / globalStats.total) * 100}%` }}
+                                className="h-full bg-gradient-to-r from-emerald-500 to-[#30D158] rounded-l-full transition-all duration-1000"
+                                title={`Listas: ${globalStats.completed}`}
+                              />
+                              <div 
+                                style={{ width: `${(globalStats.progress / globalStats.total) * 100}%` }}
+                                className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-1000"
+                                title={`En Proceso: ${globalStats.progress}`}
+                              />
+                              <div 
+                                style={{ width: `${(globalStats.pending / globalStats.total) * 100}%` }}
+                                className="h-full bg-gradient-to-r from-[#FF9F0A] to-amber-500 rounded-r-full transition-all duration-1000"
+                                title={`Pendientes: ${globalStats.pending}`}
+                              />
+                            </>
+                          ) : (
+                            <div className="h-full w-full bg-zinc-900 rounded-full flex items-center justify-center text-[9px] text-zinc-600 font-mono">Sin tareas disponibles</div>
+                          )}
+                        </div>
+
+                        {/* Detailed Metrics Row */}
+                        <div className="grid grid-cols-3 gap-3 text-center mt-1">
+                          <div className="flex flex-col items-center">
+                            <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-[#FF9F0A]" />
+                              Pendientes
+                            </span>
+                            <span className="text-sm sm:text-base font-mono font-black text-[#FF9F0A] mt-0.5">{globalStats.pending}</span>
+                          </div>
+                          <div className="flex flex-col items-center">
+                            <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-[#64D2FF]" />
+                              En Proceso
+                            </span>
+                            <span className="text-sm sm:text-base font-mono font-black text-[#64D2FF] mt-0.5">{globalStats.progress}</span>
+                          </div>
+                          <div className="flex flex-col items-center">
+                            <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-[#30D158]" />
+                              Listas
+                            </span>
+                            <span className="text-sm sm:text-base font-mono font-black text-[#30D158] mt-0.5">{globalStats.completed}</span>
+                          </div>
+                        </div>
+                      </div>
+
                     </div>
                   );
                 })()}
 
-                {/* 4. Progressive list of completed sheets (se almacena todos los completados) */}
+                {/* 2. Progressive list of completed sheets (se almacena todos los completados) */}
                 {(() => {
                   const completedSheets = sheets.filter(s => s.completed);
-                  const incompleteSheets = sheets.filter(s => {
-                    const stats = sheetStats[s.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
-                    return !(stats.total > 0 && stats.pending === 0 && stats.progress === 0);
-                  });
 
                   return (
                     <div className="flex flex-col gap-3.5 pt-4 border-t border-zinc-900">
                       <div className="text-[10px] font-bold text-amber-400 uppercase tracking-widest px-1 flex items-center gap-1.5">
-                        <Award className="w-3.5 h-3.5 text-amber-400" />
+                        <Award className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
                         <span>Hojas Completadas ({completedSheets.length})</span>
                       </div>
                       
@@ -3137,12 +3055,12 @@ export default function App() {
                             ? new Date(sheet.completedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
                             : 'Recientemente';
                           
-                          const isFocused = activeView === 'analytics' && analyticsFocusedIndex === incompleteSheets.length + idx;
+                          const isFocused = activeView === 'analytics' && analyticsFocusedIndex === idx;
 
                           return (
                             <div 
                               key={sheet.id}
-                              id={`achievements-sheet-item-${incompleteSheets.length + idx}`}
+                              id={`achievements-sheet-item-${idx}`}
                               className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-zinc-900/35 border transition-all group shadow-md gap-3 relative overflow-hidden ${isFocused ? 'border-[#FF9F0A] ring-2 ring-[#FF9F0A] ring-offset-1 ring-offset-black scale-[1.01] shadow-[0_0_15px_rgba(255,159,10,0.35)] z-10' : 'border-amber-500/20 hover:border-amber-500/40'}`}
                             >
                               {/* Shiny diagonal background gradient for completed item */}
@@ -3156,7 +3074,7 @@ export default function App() {
                                   <span className="text-xs sm:text-sm font-bold text-white">
                                     {sheet.title}
                                   </span>
-                                  <span className="text-[10px] text-zinc-500 block font-mono mt-0.5">
+                                  <span className="text-[10px] text-zinc-550 block font-mono mt-0.5">
                                     Completada el {completedDateStr} • {stats.total} tareas listas 🏆
                                   </span>
                                 </div>
@@ -3200,7 +3118,7 @@ export default function App() {
 
                         {completedSheets.length === 0 && (
                           <div className="py-8 text-center border border-dashed border-[#222428] rounded-2xl bg-[#121315]/10 flex flex-col items-center justify-center">
-                            <p className="text-[11px] text-zinc-600 font-mono">No hay hojas archivadas como completadas todavía.</p>
+                            <p className="text-[11px] text-zinc-650 font-mono">No hay hojas archivadas como completadas todavía.</p>
                           </div>
                         )}
                       </div>
@@ -3620,11 +3538,19 @@ export default function App() {
                 </label>
                 <input 
                   type="text" 
+                  id="task-title-field"
                   value={taskTitle}
                   onChange={(e) => setTaskTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      document.getElementById('task-description-field')?.focus();
+                    }
+                  }}
                   maxLength={150}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 placeholder:text-zinc-600"
                   placeholder="Ej. Comprar materiales..."
+                  autoFocus
                   required
                 />
               </div>
@@ -3634,8 +3560,15 @@ export default function App() {
                   Descripción (Opcional)
                 </label>
                 <textarea 
+                  id="task-description-field"
                   value={taskDesc}
                   onChange={(e) => setTaskDesc(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      document.getElementById('task-title-field')?.focus();
+                    }
+                  }}
                   maxLength={1000}
                   rows={3}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 placeholder:text-zinc-650 resize-none"
