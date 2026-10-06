@@ -250,6 +250,12 @@ export default function App() {
   // Active view: 'board' (Kanban) or 'analytics'
   const [activeView, setActiveView] = useState<'board' | 'analytics'>('board');
 
+  // Keyboard navigation focus states
+  const [keyboardFocusArea, setKeyboardFocusArea] = useState<'sheets' | 'board'>('sheets');
+  const [focusedColumnIndex, setFocusedColumnIndex] = useState<number>(0);
+  const [focusedTaskIndex, setFocusedTaskIndex] = useState<number>(0);
+  const [analyticsFocusedIndex, setAnalyticsFocusedIndex] = useState<number>(0);
+
   // Tasks in active sheet
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
@@ -392,6 +398,33 @@ export default function App() {
     loadLocalSheetsBackup();
   }, []);
 
+  // Reset focus index inside achievements on tab change
+  useEffect(() => {
+    if (activeView === 'analytics') {
+      setAnalyticsFocusedIndex(0);
+    }
+  }, [activeView]);
+
+  // Scroll active achievements items into view automatically
+  useEffect(() => {
+    if (activeView === 'analytics') {
+      const element = document.getElementById(`achievements-sheet-item-${analyticsFocusedIndex}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }, [analyticsFocusedIndex, activeView]);
+
+  // Scroll active board task cards into view automatically
+  useEffect(() => {
+    if (activeView === 'board' && keyboardFocusArea === 'board') {
+      const element = document.getElementById(`board-task-card-${focusedColumnIndex}-${focusedTaskIndex}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }, [focusedColumnIndex, focusedTaskIndex, keyboardFocusArea, activeView]);
+
   // Shortcut [Shift + A] for desktop layout to add a new pending task
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -403,6 +436,55 @@ export default function App() {
         activeEl.tagName === 'TEXTAREA' || 
         activeEl.getAttribute('contenteditable') === 'true'
       );
+
+      // Shortcuts for Achievements page (activeView === 'analytics')
+      if (activeView === 'analytics' && !isTyping) {
+        const incompleteSheets = sheets.filter(s => {
+          const stats = sheetStats[s.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
+          return !(stats.total > 0 && stats.pending === 0 && stats.progress === 0);
+        });
+        const completedSheets = sheets.filter(s => s.completed);
+        const totalFocusable = incompleteSheets.length + completedSheets.length;
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setAnalyticsFocusedIndex(prev => {
+            const next = Math.min(totalFocusable - 1, prev + 1);
+            if (soundEnabled) playPop();
+            return next;
+          });
+          return;
+        }
+
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setAnalyticsFocusedIndex(prev => {
+            const next = Math.max(0, prev - 1);
+            if (soundEnabled) playPop();
+            return next;
+          });
+          return;
+        }
+
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const focusIdx = analyticsFocusedIndex;
+          if (focusIdx >= 0 && focusIdx < incompleteSheets.length) {
+            const sheet = incompleteSheets[focusIdx];
+            if (soundEnabled) playWoosh();
+            setActiveSheetId(sheet.id);
+            setActiveView('board');
+            setKeyboardFocusArea('board');
+            setFocusedColumnIndex(0);
+            setFocusedTaskIndex(0);
+          } else if (focusIdx >= incompleteSheets.length && focusIdx < totalFocusable) {
+            const sheet = completedSheets[focusIdx - incompleteSheets.length];
+            if (soundEnabled) playSuccess();
+            handleRestoreSheet(sheet.id);
+          }
+          return;
+        }
+      }
 
       // Shortcut [Shift + A] for desktop layout to add a new pending task
       if (e.shiftKey && (e.key === 'A' || e.key === 'a') && !isTyping) {
@@ -436,29 +518,157 @@ export default function App() {
         handleRedo();
       }
 
-      // Shortcut [ArrowLeft] to switch sheets (with rotation wrap-around)
+      // Shortcut [ArrowLeft] to switch sheets or navigate columns
       if (e.key === 'ArrowLeft' && !isTyping) {
         e.preventDefault();
-        const curIdx = activeSheets.findIndex(s => s.id === activeSheetId);
-        if (curIdx > 0) {
-          if (soundEnabled) playWoosh();
-          setActiveSheetId(activeSheets[curIdx - 1].id);
-        } else if (curIdx === 0 && activeSheets.length > 0) {
-          if (soundEnabled) playWoosh();
-          setActiveSheetId(activeSheets[activeSheets.length - 1].id);
+        if (keyboardFocusArea === 'sheets') {
+          const curIdx = activeSheets.findIndex(s => s.id === activeSheetId);
+          if (curIdx > 0) {
+            if (soundEnabled) playWoosh();
+            setActiveSheetId(activeSheets[curIdx - 1].id);
+          } else if (curIdx === 0 && activeSheets.length > 0) {
+            if (soundEnabled) playWoosh();
+            setActiveSheetId(activeSheets[activeSheets.length - 1].id);
+          }
+        } else {
+          // board navigation (left column with wrap-around)
+          const colsCount = activeColumns.length || DEFAULT_COLUMNS.length;
+          setFocusedColumnIndex(prev => {
+            const newIdx = prev > 0 ? prev - 1 : colsCount - 1;
+            if (soundEnabled) playPop();
+            return newIdx;
+          });
+          setFocusedTaskIndex(0);
         }
       }
 
-      // Shortcut [ArrowRight] to switch sheets (with rotation wrap-around)
+      // Shortcut [ArrowRight] to switch sheets or navigate columns
       if (e.key === 'ArrowRight' && !isTyping) {
         e.preventDefault();
-        const curIdx = activeSheets.findIndex(s => s.id === activeSheetId);
-        if (curIdx < activeSheets.length - 1) {
-          if (soundEnabled) playWoosh();
-          setActiveSheetId(activeSheets[curIdx + 1].id);
-        } else if (curIdx === activeSheets.length - 1 && activeSheets.length > 0) {
-          if (soundEnabled) playWoosh();
-          setActiveSheetId(activeSheets[0].id);
+        if (keyboardFocusArea === 'sheets') {
+          const curIdx = activeSheets.findIndex(s => s.id === activeSheetId);
+          if (curIdx < activeSheets.length - 1) {
+            if (soundEnabled) playWoosh();
+            setActiveSheetId(activeSheets[curIdx + 1].id);
+          } else if (curIdx === activeSheets.length - 1 && activeSheets.length > 0) {
+            if (soundEnabled) playWoosh();
+            setActiveSheetId(activeSheets[0].id);
+          }
+        } else {
+          // board navigation (right column with wrap-around)
+          const colsCount = activeColumns.length || DEFAULT_COLUMNS.length;
+          setFocusedColumnIndex(prev => {
+            const newIdx = prev < colsCount - 1 ? prev + 1 : 0;
+            if (soundEnabled) playPop();
+            return newIdx;
+          });
+          setFocusedTaskIndex(0);
+        }
+      }
+
+      // Shortcut [ArrowDown] (enter board or move down cards)
+      if (e.key === 'ArrowDown' && !isTyping) {
+        e.preventDefault();
+        if (keyboardFocusArea === 'sheets') {
+          if (soundEnabled) playPop();
+          setKeyboardFocusArea('board');
+          setFocusedColumnIndex(0);
+          setFocusedTaskIndex(0);
+        } else {
+          const cols = activeSheet?.columns || DEFAULT_COLUMNS;
+          const targetColId = cols[focusedColumnIndex]?.id;
+          const colTasks = tasks
+            .filter(t => t.column === targetColId)
+            .filter(t => !boardFilterQuery || t.title.toLowerCase().includes(boardFilterQuery.toLowerCase()) || t.description?.toLowerCase().includes(boardFilterQuery.toLowerCase()));
+          if (colTasks.length > 0) {
+            setFocusedTaskIndex(prev => {
+              const newIdx = Math.min(colTasks.length - 1, prev + 1);
+              if (soundEnabled) playPop();
+              return newIdx;
+            });
+          }
+        }
+      }
+
+      // Shortcut [ArrowUp] (move up cards or return to sheets)
+      if (e.key === 'ArrowUp' && !isTyping) {
+        e.preventDefault();
+        if (keyboardFocusArea === 'board') {
+          if (focusedTaskIndex > 0) {
+            setFocusedTaskIndex(prev => {
+              if (soundEnabled) playPop();
+              return prev - 1;
+            });
+          } else {
+            if (soundEnabled) playWoosh();
+            setKeyboardFocusArea('sheets');
+          }
+        }
+      }
+
+      // Shortcut 'W' or 'w' to move task up in priority
+      if ((e.key === 'W' || e.key === 'w') && !isTyping && keyboardFocusArea === 'board') {
+        const cols = activeSheet?.columns || DEFAULT_COLUMNS;
+        const targetColId = cols[focusedColumnIndex]?.id;
+        const colTasks = tasks
+          .filter(t => t.column === targetColId)
+          .filter(t => !boardFilterQuery || t.title.toLowerCase().includes(boardFilterQuery.toLowerCase()) || t.description?.toLowerCase().includes(boardFilterQuery.toLowerCase()));
+        const focusedTask = colTasks[focusedTaskIndex];
+        if (focusedTask) {
+          e.preventDefault();
+          handleMoveTaskOrder(focusedTask, 'up');
+          if (focusedTaskIndex > 0) {
+            setFocusedTaskIndex(focusedTaskIndex - 1);
+          }
+        }
+      }
+
+      // Shortcut 'S' or 's' to move task down in priority
+      if ((e.key === 'S' || e.key === 's') && !isTyping && keyboardFocusArea === 'board') {
+        const cols = activeSheet?.columns || DEFAULT_COLUMNS;
+        const targetColId = cols[focusedColumnIndex]?.id;
+        const colTasks = tasks
+          .filter(t => t.column === targetColId)
+          .filter(t => !boardFilterQuery || t.title.toLowerCase().includes(boardFilterQuery.toLowerCase()) || t.description?.toLowerCase().includes(boardFilterQuery.toLowerCase()));
+        const focusedTask = colTasks[focusedTaskIndex];
+        if (focusedTask) {
+          e.preventDefault();
+          handleMoveTaskOrder(focusedTask, 'down');
+          if (focusedTaskIndex < colTasks.length - 1) {
+            setFocusedTaskIndex(focusedTaskIndex + 1);
+          }
+        }
+      }
+
+      // Shortcut 'D' or 'd' to move card forward (avanzar columna)
+      if ((e.key === 'D' || e.key === 'd') && !isTyping && keyboardFocusArea === 'board') {
+        const cols = activeSheet?.columns || DEFAULT_COLUMNS;
+        const targetColId = cols[focusedColumnIndex]?.id;
+        const colTasks = tasks
+          .filter(t => t.column === targetColId)
+          .filter(t => !boardFilterQuery || t.title.toLowerCase().includes(boardFilterQuery.toLowerCase()) || t.description?.toLowerCase().includes(boardFilterQuery.toLowerCase()));
+        const focusedTask = colTasks[focusedTaskIndex];
+        if (focusedTask && focusedColumnIndex < cols.length - 1) {
+          e.preventDefault();
+          handleMoveTask(focusedTask, 'right');
+          setFocusedColumnIndex(prev => prev + 1);
+          setFocusedTaskIndex(0);
+        }
+      }
+
+      // Shortcut 'A' or 'a' to move card backward (volver columna)
+      if ((e.key === 'A' || e.key === 'a') && !isTyping && keyboardFocusArea === 'board') {
+        const cols = activeSheet?.columns || DEFAULT_COLUMNS;
+        const targetColId = cols[focusedColumnIndex]?.id;
+        const colTasks = tasks
+          .filter(t => t.column === targetColId)
+          .filter(t => !boardFilterQuery || t.title.toLowerCase().includes(boardFilterQuery.toLowerCase()) || t.description?.toLowerCase().includes(boardFilterQuery.toLowerCase()));
+        const focusedTask = colTasks[focusedTaskIndex];
+        if (focusedTask && focusedColumnIndex > 0) {
+          e.preventDefault();
+          handleMoveTask(focusedTask, 'left');
+          setFocusedColumnIndex(prev => prev - 1);
+          setFocusedTaskIndex(0);
         }
       }
 
@@ -486,7 +696,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [soundEnabled, sheets, activeSheetId]);
+  }, [soundEnabled, sheets, activeSheetId, keyboardFocusArea, focusedColumnIndex, focusedTaskIndex, tasks, boardFilterQuery, activeView, analyticsFocusedIndex, sheetStats]);
 
   // Update slide transition direction based on tab index movement
   useEffect(() => {
@@ -2211,6 +2421,7 @@ export default function App() {
                   sheetsCount={activeSheets.length}
                   isActive={isActive}
                   isCompleted={isCompleted}
+                  isKeyboardFocused={keyboardFocusArea === 'sheets' && isActive}
                   onSelect={() => setActiveSheetId(sheet.id)}
                   onMove={handleMoveSheet}
                   onEdit={() => {
@@ -2340,11 +2551,13 @@ export default function App() {
                       onTouchMove={handleGeneric3DMove}
                       onTouchEnd={handleGeneric3DLeave}
                       style={{ 
-                        backgroundColor: `${columnVibrantColor}22`, 
-                        borderColor: `${columnVibrantColor}B5`,
-                        boxShadow: `0 24px 50px rgba(0,0,0,0.85), inset 0 0 40px ${columnVibrantColor}1F, 0 0 20px ${columnVibrantColor}1A`
+                        backgroundColor: (keyboardFocusArea === 'board' && focusedColumnIndex === idx) ? `${columnVibrantColor}35` : `${columnVibrantColor}22`, 
+                        borderColor: (keyboardFocusArea === 'board' && focusedColumnIndex === idx) ? '#FF9F0A' : `${columnVibrantColor}B5`,
+                        boxShadow: (keyboardFocusArea === 'board' && focusedColumnIndex === idx)
+                          ? `0 24px 60px rgba(255,159,10,0.35), inset 0 0 45px ${columnVibrantColor}2F, 0 0 25px ${columnVibrantColor}2A`
+                          : `0 24px 50px rgba(0,0,0,0.85), inset 0 0 40px ${columnVibrantColor}1F, 0 0 20px ${columnVibrantColor}1A`
                       }}
-                      className={`column-3d-container rounded-2xl border p-4 flex flex-col gap-3.5 w-full md:w-80 md:shrink-0 max-h-[650px] overflow-y-auto ${idx % 2 === 0 ? 'animate-float-3d-odd' : 'animate-float-3d-even'}`}
+                      className={`column-3d-container rounded-2xl border p-4 flex flex-col gap-3.5 w-full md:w-80 md:shrink-0 max-h-[650px] overflow-y-auto ${idx % 2 === 0 ? 'animate-float-3d-odd' : 'animate-float-3d-even'} ${(keyboardFocusArea === 'board' && focusedColumnIndex === idx) ? 'ring-2 ring-[#FF9F0A]/50 ring-offset-2 ring-offset-black z-10' : ''}`}
                     >
                       {/* Column Header (With editable name, instant palette, and deletion options!) */}
                       <div className="flex items-center justify-between border-b border-zinc-850/80 pb-2.5">
@@ -2553,6 +2766,8 @@ export default function App() {
                               isFirstInCol={taskIdx === 0}
                               isLastInCol={taskIdx === colTasks.length - 1}
                               onReorder={handleMoveTaskOrder}
+                              isKeyboardFocused={keyboardFocusArea === 'board' && focusedColumnIndex === idx && focusedTaskIndex === taskIdx}
+                              scrollId={`board-task-card-${idx}-${taskIdx}`}
                               isSelected={selectedTaskIds.includes(task.id)}
                               onToggleSelect={() => {
                                 if (soundEnabled) playPop();
@@ -2849,15 +3064,18 @@ export default function App() {
                           const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
                           const percent = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
                           
+                          const isFocused = activeView === 'analytics' && analyticsFocusedIndex === idx;
+
                           return (
                             <div 
                               key={sheet.id}
+                              id={`achievements-sheet-item-${idx}`}
                               onClick={() => {
                                 if (soundEnabled) playPop();
                                 setActiveSheetId(sheet.id);
                                 setActiveView('board');
                               }}
-                              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-[#121315] border border-[#222428] hover:border-[#FF9F0A]/40 transition-all cursor-pointer group shadow-sm gap-3"
+                              className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-[#121315] border transition-all cursor-pointer group shadow-sm gap-3 ${isFocused ? 'border-[#FF9F0A] ring-2 ring-[#FF9F0A] ring-offset-1 ring-offset-black scale-[1.01] shadow-[0_0_15px_rgba(255,159,10,0.35)]' : 'border-[#222428] hover:border-[#FF9F0A]/40'}`}
                             >
                               <div className="flex items-center gap-3">
                                 <Layers className="w-4.5 h-4.5 text-zinc-550 group-hover:text-[#FF9F0A] transition-colors" />
@@ -2900,6 +3118,10 @@ export default function App() {
                 {/* 4. Progressive list of completed sheets (se almacena todos los completados) */}
                 {(() => {
                   const completedSheets = sheets.filter(s => s.completed);
+                  const incompleteSheets = sheets.filter(s => {
+                    const stats = sheetStats[s.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
+                    return !(stats.total > 0 && stats.pending === 0 && stats.progress === 0);
+                  });
 
                   return (
                     <div className="flex flex-col gap-3.5 pt-4 border-t border-zinc-900">
@@ -2909,16 +3131,19 @@ export default function App() {
                       </div>
                       
                       <div className="flex flex-col gap-3">
-                        {completedSheets.map((sheet) => {
+                        {completedSheets.map((sheet, idx) => {
                           const stats = sheetStats[sheet.id] || { total: 0, completed: 0, pending: 0, progress: 0 };
                           const completedDateStr = sheet.completedAt 
                             ? new Date(sheet.completedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
                             : 'Recientemente';
                           
+                          const isFocused = activeView === 'analytics' && analyticsFocusedIndex === incompleteSheets.length + idx;
+
                           return (
                             <div 
                               key={sheet.id}
-                              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-zinc-900/35 border border-amber-500/20 hover:border-amber-500/40 transition-all group shadow-md gap-3 relative overflow-hidden"
+                              id={`achievements-sheet-item-${incompleteSheets.length + idx}`}
+                              className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-zinc-900/35 border transition-all group shadow-md gap-3 relative overflow-hidden ${isFocused ? 'border-[#FF9F0A] ring-2 ring-[#FF9F0A] ring-offset-1 ring-offset-black scale-[1.01] shadow-[0_0_15px_rgba(255,159,10,0.35)] z-10' : 'border-amber-500/20 hover:border-amber-500/40'}`}
                             >
                               {/* Shiny diagonal background gradient for completed item */}
                               <div className="absolute inset-0 bg-gradient-to-r from-amber-500/0 via-amber-500/[0.02] to-amber-500/0 pointer-events-none" />
@@ -3602,11 +3827,13 @@ interface TaskCardProps {
   isFirstInCol?: boolean;
   isLastInCol?: boolean;
   onReorder: (task: Task, direction: 'up' | 'down') => void;
+  isKeyboardFocused?: boolean;
   isSelected?: boolean;
   onToggleSelect?: () => void;
+  scrollId?: string;
 }
 
-function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isFirstInCol = false, isLastInCol = false, onReorder, isSelected, onToggleSelect }: TaskCardProps) {
+function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isFirstInCol = false, isLastInCol = false, onReorder, isKeyboardFocused = false, isSelected, onToggleSelect, scrollId }: TaskCardProps) {
   const currentIndex = activeColumns.findIndex(c => c.id === task.column);
   const lastColId = activeColumns[activeColumns.length - 1]?.id || 'done';
 
@@ -3661,6 +3888,7 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isFirstInCol 
 
   return (
     <div 
+      id={scrollId}
       onMouseDown={(e) => { handleStart(e.clientX); playPop(); }}
       onMouseMove={(e) => {
         handleMove(e.clientX);
@@ -3688,11 +3916,13 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isFirstInCol 
         transform: `translateX(${dragOffset}px) rotate(${dragOffset * 0.04}deg) perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
         transition: isDraggingCard.current ? 'none' : 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
         cursor: isDraggingCard.current ? 'grabbing' : 'grab',
-        borderColor: `${cardVibrantColor}B5`,
-        backgroundColor: `${cardVibrantColor}35`,
-        boxShadow: `0 12px 30px -4px ${cardVibrantColor}70, inset 0 0 20px ${cardVibrantColor}25, 0 0 15px ${cardVibrantColor}1F`
+        borderColor: isKeyboardFocused ? '#FF9F0A' : `${cardVibrantColor}B5`,
+        backgroundColor: isKeyboardFocused ? `${cardVibrantColor}55` : `${cardVibrantColor}35`,
+        boxShadow: isKeyboardFocused 
+          ? `0 0 35px rgba(255,159,10,0.85), inset 0 0 25px ${cardVibrantColor}60, 0 0 15px rgba(255,159,10,0.4)`
+          : `0 12px 30px -4px ${cardVibrantColor}70, inset 0 0 20px ${cardVibrantColor}25, 0 0 15px ${cardVibrantColor}1F`
       }}
-      className="task-card-3d p-2.5 sm:p-3 rounded-xl border hover:border-white/80 shadow-md transform group flex flex-col gap-1.5 relative select-none touch-pan-y min-h-[65px] h-auto flex-shrink-0"
+      className={`task-card-3d p-2.5 sm:p-3 rounded-xl border hover:border-white/80 shadow-md transform group flex flex-col gap-1.5 relative select-none touch-pan-y min-h-[65px] h-auto flex-shrink-0 ${isKeyboardFocused ? 'ring-2 ring-[#FF9F0A] ring-offset-2 ring-offset-black scale-[1.03] z-10 animate-pulse' : ''}`}
     >
       
       <div className="flex items-start justify-between gap-1.5 w-full">
@@ -3844,6 +4074,18 @@ function InteractiveCongrats3D({ taskTitle, points, onClose }: InteractiveCongra
     }
     particles.current = pList;
   }, []);
+
+  // Listen to Enter key to dismiss and return to the feed
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -4092,6 +4334,7 @@ interface SheetTabProps {
   sheetsCount: number;
   isActive: boolean;
   isCompleted: boolean;
+  isKeyboardFocused?: boolean;
   onSelect: () => void;
   onMove: (sheetId: string, direction: 'left' | 'right') => void;
   onEdit: () => void;
@@ -4107,6 +4350,7 @@ function SheetTab({
   sheetsCount, 
   isActive, 
   isCompleted, 
+  isKeyboardFocused = false,
   onSelect, 
   onMove, 
   onEdit, 
@@ -4170,7 +4414,7 @@ function SheetTab({
             onSelect();
           }
         }}
-        className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-t-xl transition-all border-t border-x cursor-pointer whitespace-nowrap ${isActive ? 'bg-[#0c0c0e] border-zinc-800 text-amber-400 font-bold -mb-px shadow-[0_-4px_12px_rgba(0,0,0,0.3)]' : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'}`}
+        className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-t-xl transition-all border-t border-x cursor-pointer whitespace-nowrap ${isActive ? 'bg-[#0c0c0e] border-zinc-800 text-amber-400 font-bold -mb-px shadow-[0_-4px_12px_rgba(0,0,0,0.3)]' : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'} ${isKeyboardFocused ? 'ring-2 ring-[#FF9F0A] ring-offset-1 ring-offset-black animate-pulse shadow-[0_-4px_15px_rgba(255,159,10,0.4)] bg-[#1e1507]' : ''}`}
       >
         <span className="font-sans font-semibold text-xs sm:text-sm">{sheet.title}</span>
 
