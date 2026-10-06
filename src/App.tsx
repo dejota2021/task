@@ -40,6 +40,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Layers,
   BarChart3,
   LayoutDashboard,
@@ -206,6 +207,7 @@ interface Task {
   column: string; // references KanbanColumn.id
   createdAt: any;
   completedAt?: any;
+  order?: number;
 }
 
 // Interactive 3D Canvas Particle Engine
@@ -590,6 +592,7 @@ export default function App() {
             ...t,
             createdAt: new Date(t.createdAt)
           }));
+          parsed.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0) || b.createdAt.getTime() - a.createdAt.getTime());
           setTasks(parsed);
         } catch (e) {
           console.error("Error parsing tasks backup for sheet:", e);
@@ -635,11 +638,12 @@ export default function App() {
           description: data.description || '',
           column: data.column || 'pending',
           createdAt: taskDate,
-          completedAt: data.completedAt
+          completedAt: data.completedAt,
+          order: data.order ?? 0
         });
       });
 
-      taskList.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      taskList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || b.createdAt.getTime() - a.createdAt.getTime());
       setTasks(taskList);
       
       localStorage.setItem(`sincrotask_tasks_backup_${activeSheetId}`, JSON.stringify(taskList));
@@ -1245,15 +1249,19 @@ export default function App() {
     const taskDocRef = doc(tasksRef);
     const resolvedId = isOfflineFallback ? tempId : taskDocRef.id;
 
+    const colTasksCount = tasks.filter(t => t.column === firstColId).length;
     const newTask: Task = {
       id: resolvedId,
       title: taskTitle.trim(),
       description: taskDesc.trim(),
       column: firstColId,
-      createdAt: new Date()
+      createdAt: new Date(),
+      order: colTasksCount
     };
 
     const updated = [newTask, ...tasks];
+    // Sort so vertical order holds correctly after inline addition
+    updated.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || b.createdAt.getTime() - a.createdAt.getTime());
     setTasks(updated);
     localStorage.setItem(`sincrotask_tasks_backup_${activeSheetId}`, JSON.stringify(updated));
 
@@ -1275,7 +1283,8 @@ export default function App() {
           description: newTask.description,
           column: newTask.column,
           points: 1,
-          createdAt: newTask.createdAt
+          createdAt: newTask.createdAt,
+          order: newTask.order
         });
       }
     );
@@ -1288,7 +1297,8 @@ export default function App() {
         description: newTask.description,
         column: newTask.column,
         points: 1, // 1 XP default
-        createdAt: newTask.createdAt
+        createdAt: newTask.createdAt,
+        order: newTask.order
       });
     } catch (err: any) {
       console.warn("Firestore error on task save. Continuing in local backup mode:", err);
@@ -1312,15 +1322,18 @@ export default function App() {
     const taskDocRef = doc(tasksRef);
     const resolvedId = isOfflineFallback ? tempId : taskDocRef.id;
 
+    const colTasksCount = tasks.filter(t => t.column === firstColId).length;
     const newTask: Task = {
       id: resolvedId,
       title: title,
       description: inlineTaskDesc.trim(),
       column: firstColId,
-      createdAt: new Date()
+      createdAt: new Date(),
+      order: colTasksCount
     };
 
     const updated = [newTask, ...tasks];
+    updated.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || b.createdAt.getTime() - a.createdAt.getTime());
     setTasks(updated);
     localStorage.setItem(`sincrotask_tasks_backup_${activeSheetId}`, JSON.stringify(updated));
 
@@ -1341,7 +1354,8 @@ export default function App() {
           description: newTask.description,
           column: newTask.column,
           points: 1,
-          createdAt: newTask.createdAt
+          createdAt: newTask.createdAt,
+          order: newTask.order
         });
       }
     );
@@ -1354,7 +1368,8 @@ export default function App() {
         description: newTask.description,
         column: newTask.column,
         points: 1, // 1 XP default
-        createdAt: newTask.createdAt
+        createdAt: newTask.createdAt,
+        order: newTask.order
       });
     } catch (err: any) {
       console.warn("Firestore error on inline task save:", err);
@@ -1499,6 +1514,62 @@ export default function App() {
       console.warn("Firebase task move failed, switched to local storage:", err);
       setIsOfflineFallback(true);
       handleFirestoreError(err, OperationType.UPDATE, `boards/${activeSheetId}/tasks/${task.id}`);
+    }
+  };
+
+  // Move task up/down within its column to change order
+  const handleMoveTaskOrder = async (task: Task, direction: 'up' | 'down') => {
+    const colTasks = tasks.filter(t => t.column === task.column);
+    const index = colTasks.findIndex(t => t.id === task.id);
+    if (index === -1) return;
+
+    let targetIndex = -1;
+    if (direction === 'up' && index > 0) {
+      targetIndex = index - 1;
+    } else if (direction === 'down' && index < colTasks.length - 1) {
+      targetIndex = index + 1;
+    }
+
+    if (targetIndex === -1) return;
+
+    if (soundEnabled) playPop();
+
+    // Re-assign order based on current list index so we have explicit numeric ordering
+    const sortedColTasks = [...colTasks];
+    sortedColTasks.forEach((t, idx) => {
+      t.order = idx;
+    });
+
+    // Swap the order values
+    const taskA = sortedColTasks[index];
+    const taskB = sortedColTasks[targetIndex];
+    const tempOrder = taskA.order ?? 0;
+    taskA.order = taskB.order ?? 0;
+    taskB.order = tempOrder;
+
+    // Update the main tasks list with updated orders
+    const updatedTasks = tasks.map(t => {
+      const match = sortedColTasks.find(ct => ct.id === t.id);
+      if (match) {
+        return { ...t, order: match.order };
+      }
+      return t;
+    });
+
+    // Sort to keep local state updated
+    updatedTasks.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || b.createdAt.getTime() - a.createdAt.getTime());
+    setTasks(updatedTasks);
+    localStorage.setItem(`sincrotask_tasks_backup_${activeSheetId}`, JSON.stringify(updatedTasks));
+
+    if (isOfflineFallback) return;
+
+    try {
+      const docRefA = doc(db, 'boards', activeSheetId, 'tasks', taskA.id);
+      const docRefB = doc(db, 'boards', activeSheetId, 'tasks', taskB.id);
+      await updateDoc(docRefA, { order: taskA.order });
+      await updateDoc(docRefB, { order: taskB.order });
+    } catch (err) {
+      console.warn("Firebase task reorder failed:", err);
     }
   };
 
@@ -2466,7 +2537,7 @@ export default function App() {
                             <p className="text-[11px] text-zinc-500">Vacío</p>
                           </div>
                         ) : (
-                          colTasks.map((task) => (
+                          colTasks.map((task, taskIdx) => (
                             <TaskCard 
                               key={task.id} 
                               task={task} 
@@ -2479,6 +2550,9 @@ export default function App() {
                                 setEditTaskTitle(task.title);
                                 setEditTaskDesc(task.description);
                               }}
+                              isFirstInCol={taskIdx === 0}
+                              isLastInCol={taskIdx === colTasks.length - 1}
+                              onReorder={handleMoveTaskOrder}
                               isSelected={selectedTaskIds.includes(task.id)}
                               onToggleSelect={() => {
                                 if (soundEnabled) playPop();
@@ -3525,11 +3599,14 @@ interface TaskCardProps {
   onMove: (task: Task, direction: 'left' | 'right') => void;
   onDelete: (task: Task) => void;
   onEdit: () => void;
+  isFirstInCol?: boolean;
+  isLastInCol?: boolean;
+  onReorder: (task: Task, direction: 'up' | 'down') => void;
   isSelected?: boolean;
   onToggleSelect?: () => void;
 }
 
-function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isSelected, onToggleSelect }: TaskCardProps) {
+function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isFirstInCol = false, isLastInCol = false, onReorder, isSelected, onToggleSelect }: TaskCardProps) {
   const currentIndex = activeColumns.findIndex(c => c.id === task.column);
   const lastColId = activeColumns[activeColumns.length - 1]?.id || 'done';
 
@@ -3654,6 +3731,26 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isSelected, o
           title="Eliminar"
         >
           <Trash2 className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Reorder Up */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onReorder(task, 'up'); }}
+          disabled={isFirstInCol}
+          className="p-1 text-slate-400 hover:text-white bg-slate-800 disabled:bg-slate-900/40 hover:bg-slate-700 border border-slate-700/50 rounded transition-all cursor-pointer disabled:opacity-25"
+          title="Subir prioridad"
+        >
+          <ChevronUp className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Reorder Down */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onReorder(task, 'down'); }}
+          disabled={isLastInCol}
+          className="p-1 text-slate-400 hover:text-white bg-slate-800 disabled:bg-slate-900/40 hover:bg-slate-700 border border-slate-700/50 rounded transition-all cursor-pointer disabled:opacity-25"
+          title="Bajar prioridad"
+        >
+          <ChevronDown className="w-3.5 h-3.5" />
         </button>
 
         {/* Move left */}
