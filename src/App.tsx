@@ -3820,6 +3820,72 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isFirstInCol 
           </div>
         </div>
       )}
+
+      {/* Action Footer - Conditionally visible only on mobile screens */}
+      <div className="md:hidden flex items-center justify-end border-t border-slate-800/40 pt-1.5 mt-1.5 gap-2 w-full">
+        {/* Edit task pencil */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onEdit(); }}
+          className="p-1 text-slate-400 hover:text-amber-400 hover:bg-amber-950/30 rounded transition-all cursor-pointer"
+          title="Editar pendiente"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Delete task */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(task); }}
+          className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 rounded transition-all cursor-pointer"
+          title="Eliminar"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Reorder Up */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onReorder(task, 'up'); }}
+          disabled={isFirstInCol}
+          className="p-1 text-slate-400 hover:text-white bg-slate-800 disabled:bg-slate-900/40 hover:bg-slate-700 border border-slate-700/50 rounded transition-all cursor-pointer disabled:opacity-25"
+          title="Subir prioridad"
+        >
+          <ChevronUp className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Reorder Down */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onReorder(task, 'down'); }}
+          disabled={isLastInCol}
+          className="p-1 text-slate-400 hover:text-white bg-slate-800 disabled:bg-slate-900/40 hover:bg-slate-700 border border-slate-700/50 rounded transition-all cursor-pointer disabled:opacity-25"
+          title="Bajar prioridad"
+        >
+          <ChevronDown className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Move left */}
+        {currentIndex > 0 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onMove(task, 'left'); }}
+            className="p-1 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700/50 rounded transition-all cursor-pointer"
+            title="Mover atrás"
+          >
+            <ArrowLeft className="w-3 h-3" />
+          </button>
+        )}
+
+        {/* Move right */}
+        {currentIndex < activeColumns.length - 1 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onMove(task, 'right'); }}
+            className="p-1 text-black bg-[#FF9F0A] hover:bg-[#FFB340] font-black rounded transition-all flex items-center gap-0.5 cursor-pointer shadow-sm"
+            title={currentIndex === activeColumns.length - 2 ? "Completar" : "Avanzar"}
+          >
+            <span className="text-[9px] font-black px-1 py-0.5">
+              {currentIndex === activeColumns.length - 2 ? 'Listo!' : 'Avanzar'}
+            </span>
+            {currentIndex === activeColumns.length - 2 ? <Check className="w-2.5 h-2.5 stroke-[3]" /> : <ArrowRight className="w-2.5 h-2.5 stroke-[3]" />}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
