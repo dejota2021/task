@@ -51,9 +51,11 @@ import {
   PieChart,
   Undo2,
   Redo2,
-  Zap
+  Zap,
+  Download,
+  Upload
 } from 'lucide-react';
-import { db, handleFirestoreError, OperationType } from './firebase';
+import { db, handleFirestoreError, OperationType, initAuth, googleSignIn, getAccessToken, googleLogout } from './firebase';
 import { playPop, playWoosh, playSuccess, playFanfare, playMegaCelebration } from './sound';
 
 // Column Interface (Fully Dynamic!)
@@ -209,6 +211,7 @@ interface Task {
   createdAt: any;
   completedAt?: any;
   order?: number;
+  dueDate?: string;
 }
 
 // Interactive 3D Canvas Particle Engine
@@ -248,8 +251,8 @@ export default function App() {
   const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('right');
   const prevSheetId = useRef<string>(activeSheetId);
 
-  // Active view: 'board' (Kanban) or 'analytics'
-  const [activeView, setActiveView] = useState<'board' | 'analytics'>('board');
+  // Active view: 'board' (Kanban), 'analytics', or 'calendar'
+  const [activeView, setActiveView] = useState<'board' | 'analytics' | 'calendar'>('board');
 
   // Keyboard navigation focus states
   const [keyboardFocusArea, setKeyboardFocusArea] = useState<'sheets' | 'board'>('sheets');
@@ -275,6 +278,8 @@ export default function App() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editTaskTitle, setEditTaskTitle] = useState('');
   const [editTaskDesc, setEditTaskDesc] = useState('');
+  const [editTaskDueDate, setEditTaskDueDate] = useState('');
+  const [editTaskColumn, setEditTaskColumn] = useState('');
 
   // Column creation and edit form
   const [showAddColumnInput, setShowAddColumnInput] = useState(false);
@@ -343,11 +348,130 @@ export default function App() {
   const [showAddTask, setShowAddTask] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDesc, setTaskDesc] = useState('');
+  const [taskDueDate, setTaskDueDate] = useState('');
   const [formError, setFormError] = useState('');
 
   // Inline task form states
   const [inlineTaskTitle, setInlineTaskTitle] = useState('');
   const [inlineTaskDesc, setInlineTaskDesc] = useState('');
+
+  // Google Calendar Integration States & Handlers
+  const [googleUser, setGoogleUser] = useState<any>(null);
+  const [googleToken, setGoogleToken] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (user, token) => {
+        setGoogleUser(user);
+        setGoogleToken(token);
+      },
+      () => {
+        setGoogleUser(null);
+        setGoogleToken(null);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  const handleGoogleLogin = async () => {
+    try {
+      const result = await googleSignIn();
+      if (result) {
+        setGoogleUser(result.user);
+        setGoogleToken(result.accessToken);
+        if (soundEnabled) playSuccess();
+        setSyncToastMessage('Sesión de Google iniciada con éxito');
+        setShowSyncToast(true);
+      }
+    } catch (err) {
+      console.error('Login failed:', err);
+    }
+  };
+
+  const handleGoogleLogout = async () => {
+    try {
+      await googleLogout();
+      setGoogleUser(null);
+      setGoogleToken(null);
+      if (soundEnabled) playPop();
+      setSyncToastMessage('Sesión de Google cerrada');
+      setShowSyncToast(true);
+    } catch (err) {
+      console.error('Logout failed:', err);
+    }
+  };
+
+  const handleGoogleCalendarSync = async () => {
+    if (!googleToken) {
+      setSyncToastMessage('Inicia sesión con Google para sincronizar');
+      setShowSyncToast(true);
+      return;
+    }
+
+    if (tasks.length === 0) {
+      setSyncToastMessage('No hay tareas activas para sincronizar');
+      setShowSyncToast(true);
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncToastMessage('Sincronizando tareas...');
+    setShowSyncToast(true);
+
+    let count = 0;
+    const calendarId = 'proyecto2021dejota@gmail.com';
+
+    for (const task of tasks) {
+      const isSynced = localStorage.getItem(`synced_cal_${task.id}`);
+      if (isSynced) continue;
+
+      try {
+        let startStr = task.dueDate;
+        let endStr = '';
+        if (startStr) {
+          const startDate = new Date(startStr + 'T12:00:00'); // noon to avoid shifts
+          const tomorrowDate = new Date(startDate.getTime() + 86400000);
+          endStr = tomorrowDate.toISOString().split('T')[0];
+        } else {
+          startStr = new Date().toISOString().split('T')[0];
+          endStr = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+        }
+
+        const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${googleToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            summary: `TaskPro: ${task.title}`,
+            description: task.description || 'Sincronizada desde TaskPro 3D',
+            start: { date: startStr },
+            end: { date: endStr }
+          })
+        });
+
+        if (response.ok) {
+          localStorage.setItem(`synced_cal_${task.id}`, 'true');
+          count++;
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          console.error("Error creating event on Google Calendar:", errData);
+        }
+      } catch (err) {
+        console.error("Google Calendar insertion failed for task:", task.title, err);
+      }
+    }
+
+    setIsSyncing(false);
+    if (soundEnabled) {
+      if (count > 0) playSuccess();
+      else playPop();
+    }
+    setSyncToastMessage(count > 0 ? `¡Sincronizadas ${count} tareas con éxito!` : 'Todas las tareas ya estaban sincronizadas');
+    setShowSyncToast(true);
+  };
 
   // Celebration state
   const [celebrationTask, setCelebrationTask] = useState<{ title: string; points: number } | null>(null);
@@ -453,6 +577,9 @@ export default function App() {
   // Shortcut [Shift + A] for desktop layout to add a new pending task
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (celebrationTask) {
+        return;
+      }
       // Trigger only if Shift + A is pressed (case-insensitive or specifically 'A' / 'a')
       // Make sure we are not focused on any input, textarea, or contenteditable element
       const activeEl = document.activeElement;
@@ -664,6 +791,8 @@ export default function App() {
           setEditingTask(focusedTask);
           setEditTaskTitle(focusedTask.title);
           setEditTaskDesc(focusedTask.description || '');
+          setEditTaskDueDate(focusedTask.dueDate || '');
+          setEditTaskColumn(focusedTask.column || '');
           return;
         }
       }
@@ -761,7 +890,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [soundEnabled, sheets, activeSheetId, keyboardFocusArea, focusedColumnIndex, focusedTaskIndex, tasks, boardFilterQuery, activeView, analyticsFocusedIndex, sheetStats, showAddTask]);
+  }, [soundEnabled, sheets, activeSheetId, keyboardFocusArea, focusedColumnIndex, focusedTaskIndex, tasks, boardFilterQuery, activeView, analyticsFocusedIndex, sheetStats, showAddTask, celebrationTask]);
 
   // Update slide transition direction based on tab index movement
   useEffect(() => {
@@ -781,6 +910,60 @@ export default function App() {
 
     const boardsRef = collection(db, 'boards');
     const unsubscribe = onSnapshot(boardsRef, (snapshot) => {
+      if (snapshot.size === 0) {
+        // Firestore is empty! Check if we have local storage data to restore/upload
+        const localSheetsStr = localStorage.getItem('sincrotask_sheets_list');
+        if (localSheetsStr) {
+          try {
+            const localSheets = JSON.parse(localSheetsStr) as Sheet[];
+            if (localSheets.length > 0) {
+              setSheets(localSheets);
+              localSheets.forEach(async (sheet) => {
+                await setDoc(doc(db, 'boards', sheet.id), {
+                  title: sheet.title,
+                  createdAt: sheet.createdAt || Date.now(),
+                  columns: sheet.columns || DEFAULT_COLUMNS,
+                  order: sheet.order ?? 0,
+                  completed: sheet.completed || false,
+                  completedAt: sheet.completedAt || null
+                });
+
+                const localTasksStr = localStorage.getItem(`sincrotask_tasks_backup_${sheet.id}`);
+                if (localTasksStr) {
+                  try {
+                    const localTasks = JSON.parse(localTasksStr) as Task[];
+                    localTasks.forEach(async (t) => {
+                      const taskRef = doc(db, 'boards', sheet.id, 'tasks', t.id);
+                      await setDoc(taskRef, {
+                        title: t.title,
+                        description: t.description || '',
+                        column: t.column || 'pending',
+                        createdAt: t.createdAt ? new Date(t.createdAt) : new Date(),
+                        completedAt: t.completedAt || null,
+                        order: t.order ?? 0,
+                        dueDate: t.dueDate || null,
+                        points: 1
+                      });
+                    });
+                  } catch (err) {}
+                }
+              });
+
+              const lastActive = localStorage.getItem('sincrotask_active_sheet_id');
+              const activeSheetsList = localSheets.filter(s => !s.completed);
+              if (lastActive && activeSheetsList.some(s => s.id === lastActive)) {
+                setActiveSheetId(lastActive);
+              } else if (activeSheetsList.length > 0) {
+                setActiveSheetId(activeSheetsList[0].id);
+              }
+              return;
+            }
+          } catch (e) {
+            console.error("Error auto restoring local backup to Firestore:", e);
+          }
+        }
+      }
+
       const sheetsList: Sheet[] = [];
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
@@ -914,7 +1097,8 @@ export default function App() {
           column: data.column || 'pending',
           createdAt: taskDate,
           completedAt: data.completedAt,
-          order: data.order ?? 0
+          order: data.order ?? 0,
+          dueDate: data.dueDate || null
         });
       });
 
@@ -1531,7 +1715,8 @@ export default function App() {
       description: taskDesc.trim(),
       column: firstColId,
       createdAt: new Date(),
-      order: colTasksCount
+      order: colTasksCount,
+      dueDate: taskDueDate || undefined
     };
 
     const updated = [newTask, ...tasks];
@@ -1543,6 +1728,7 @@ export default function App() {
     setShowAddTask(false);
     setTaskTitle('');
     setTaskDesc('');
+    setTaskDueDate('');
 
     // Register Undo/Redo Action
     pushAction(
@@ -1559,7 +1745,8 @@ export default function App() {
           column: newTask.column,
           points: 1,
           createdAt: newTask.createdAt,
-          order: newTask.order
+          order: newTask.order,
+          dueDate: newTask.dueDate || null
         });
       }
     );
@@ -1573,7 +1760,8 @@ export default function App() {
         column: newTask.column,
         points: 1, // 1 XP default
         createdAt: newTask.createdAt,
-        order: newTask.order
+        order: newTask.order,
+        dueDate: newTask.dueDate || null
       });
     } catch (err: any) {
       console.warn("Firestore error on task save. Continuing in local backup mode:", err);
@@ -1653,7 +1841,7 @@ export default function App() {
     }
   };
 
-  // Edit task details (Title & Description)
+  // Edit task details (Title, Description, Due Date, Column)
   const handleEditTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTask || !editTaskTitle.trim()) return;
@@ -1662,15 +1850,25 @@ export default function App() {
 
     const oldTitle = editingTask.title;
     const oldDesc = editingTask.description || '';
+    const oldDueDate = editingTask.dueDate || '';
+    const oldColumn = editingTask.column;
+
     const newTitle = editTaskTitle.trim();
     const newDesc = editTaskDesc.trim();
+    const newDueDate = editTaskDueDate || '';
+    const newColumn = editTaskColumn || editingTask.column;
+
+    const lastColId = activeColumns[activeColumns.length - 1]?.id || 'done';
 
     const updatedTasks = tasks.map(t => {
       if (t.id === editingTask.id) {
         return {
           ...t,
           title: newTitle,
-          description: newDesc
+          description: newDesc,
+          dueDate: newDueDate || undefined,
+          column: newColumn,
+          completedAt: (newColumn === lastColId && oldColumn !== lastColId) ? new Date() : t.completedAt
         };
       }
       return t;
@@ -1680,16 +1878,48 @@ export default function App() {
     localStorage.setItem(`sincrotask_tasks_backup_${activeSheetId}`, JSON.stringify(updatedTasks));
     setEditingTask(null);
 
+    // Trigger celebration if task was moved to the last column (completed!)
+    if (newColumn === lastColId && oldColumn !== lastColId) {
+      if (soundEnabled) playMegaCelebration();
+      setCelebrationTask({
+        title: newTitle,
+        points: 1
+      });
+
+      if (!isOfflineFallback) {
+        try {
+          const celebrationsRef = collection(db, 'celebrations');
+          await addDoc(celebrationsRef, {
+            taskTitle: newTitle,
+            points: 1,
+            timestamp: Date.now()
+          });
+        } catch (err) {
+          console.warn("Unable to sync celebration online:", err);
+        }
+      }
+    }
+
     // Register Undo/Redo Action
     pushAction(
       `Editar "${newTitle}"`,
       async () => {
         const ref = doc(db, 'boards', activeSheetId, 'tasks', editingTask.id);
-        await updateDoc(ref, { title: oldTitle, description: oldDesc });
+        await updateDoc(ref, { 
+          title: oldTitle, 
+          description: oldDesc,
+          dueDate: oldDueDate || null,
+          column: oldColumn
+        });
       },
       async () => {
         const ref = doc(db, 'boards', activeSheetId, 'tasks', editingTask.id);
-        await updateDoc(ref, { title: newTitle, description: newDesc });
+        await updateDoc(ref, { 
+          title: newTitle, 
+          description: newDesc,
+          dueDate: newDueDate || null,
+          column: newColumn
+        });
       }
     );
 
@@ -1699,7 +1929,10 @@ export default function App() {
       const taskDocRef = doc(db, 'boards', activeSheetId, 'tasks', editingTask.id);
       await updateDoc(taskDocRef, {
         title: newTitle,
-        description: newDesc
+        description: newDesc,
+        dueDate: newDueDate || null,
+        column: newColumn,
+        completedAt: (newColumn === lastColId && oldColumn !== lastColId) ? new Date() : null
       });
     } catch (err) {
       console.warn("Firebase task edit failed:", err);
@@ -2148,6 +2381,109 @@ export default function App() {
     return all;
   };
 
+  // Export all sheets and tasks backup as a JSON file
+  const handleExportBackup = () => {
+    if (soundEnabled) playSuccess();
+    const backupData: { sheets: Sheet[]; tasks: { [sheetId: string]: Task[] } } = {
+      sheets: sheets,
+      tasks: {}
+    };
+
+    sheets.forEach(sheet => {
+      const stored = localStorage.getItem(`sincrotask_tasks_backup_${sheet.id}`);
+      if (stored) {
+        try {
+          backupData.tasks[sheet.id] = JSON.parse(stored);
+        } catch (e) {}
+      } else if (sheet.id === activeSheetId) {
+        backupData.tasks[sheet.id] = tasks;
+      }
+    });
+
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `TaskPro3D_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    setSyncToastMessage('Copia de seguridad exportada con éxito');
+    setShowSyncToast(true);
+  };
+
+  // Import sheets and tasks backup from JSON
+  const handleImportBackup = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (soundEnabled) playFanfare();
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        if (data && Array.isArray(data.sheets)) {
+          const importedSheets = data.sheets as Sheet[];
+          const importedTasksMap = (data.tasks || {}) as { [sheetId: string]: Task[] };
+
+          // 1. Update local storage instantly
+          localStorage.setItem('sincrotask_sheets_list', JSON.stringify(importedSheets));
+          setSheets(importedSheets);
+
+          // 2. Save tasks to local storage
+          Object.keys(importedTasksMap).forEach(sheetId => {
+            localStorage.setItem(`sincrotask_tasks_backup_${sheetId}`, JSON.stringify(importedTasksMap[sheetId]));
+          });
+
+          if (importedSheets.length > 0) {
+            setActiveSheetId(importedSheets[0].id);
+          }
+
+          // 3. Upload to Firestore
+          if (!isOfflineFallback) {
+            for (const sheet of importedSheets) {
+              await setDoc(doc(db, 'boards', sheet.id), {
+                title: sheet.title,
+                createdAt: sheet.createdAt || Date.now(),
+                columns: sheet.columns || DEFAULT_COLUMNS,
+                order: sheet.order ?? 0,
+                completed: sheet.completed || false,
+                completedAt: sheet.completedAt || null
+              });
+
+              const sheetTasks = importedTasksMap[sheet.id] || [];
+              for (const t of sheetTasks) {
+                const taskRef = doc(db, 'boards', sheet.id, 'tasks', t.id);
+                await setDoc(taskRef, {
+                  title: t.title,
+                  description: t.description || '',
+                  column: t.column || 'pending',
+                  createdAt: t.createdAt ? new Date(t.createdAt) : new Date(),
+                  completedAt: t.completedAt || null,
+                  order: t.order ?? 0,
+                  dueDate: t.dueDate || null,
+                  points: 1
+                });
+              }
+            }
+          }
+
+          setSyncToastMessage('Copia de seguridad importada y sincronizada');
+          setShowSyncToast(true);
+        } else {
+          alert('Formato de copia de seguridad no válido');
+        }
+      } catch (err) {
+        console.error("Failed to import backup:", err);
+        alert('Error al procesar el archivo de copia de seguridad');
+      }
+    };
+    reader.readAsText(file);
+  };
+
   // Stats calculation
   const totalTasks = tasks.length;
   const lastColId = activeColumns[activeColumns.length - 1]?.id || 'done';
@@ -2184,21 +2520,28 @@ export default function App() {
             </div>
           </div>
 
-          {/* CENTER SECTION: TABLERO / LOGROS SWITCH (Centrado de forma perfecta) */}
+          {/* CENTER SECTION: TABLERO / LOGROS / CALENDARIO SWITCH (Centrado de forma perfecta) */}
           <div className="flex items-center bg-[#151619] p-1 rounded-xl border border-[#26282e] justify-self-center">
             <button
               onClick={() => { if (soundEnabled) playPop(); setActiveView('board'); }}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${activeView === 'board' ? 'bg-[#FF9F0A] text-black shadow-md shadow-[#FF9F0A]/20 font-black' : 'text-zinc-400 hover:text-white'}`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${activeView === 'board' ? 'bg-[#FF9F0A] text-black shadow-md shadow-[#FF9F0A]/20 font-black' : 'text-zinc-400 hover:text-white'}`}
             >
               <LayoutDashboard className="w-3.5 h-3.5" />
               <span>Tablero</span>
             </button>
             <button
               onClick={() => { if (soundEnabled) playPop(); setActiveView('analytics'); }}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${activeView === 'analytics' ? 'bg-[#FF9F0A] text-black shadow-md shadow-[#FF9F0A]/20 font-black' : 'text-zinc-400 hover:text-white'}`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${activeView === 'analytics' ? 'bg-[#FF9F0A] text-black shadow-md shadow-[#FF9F0A]/20 font-black' : 'text-zinc-400 hover:text-white'}`}
             >
               <BarChart3 className="w-3.5 h-3.5" />
               <span>Logros</span>
+            </button>
+            <button
+              onClick={() => { if (soundEnabled) playPop(); setActiveView('calendar'); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${activeView === 'calendar' ? 'bg-[#FF9F0A] text-black shadow-md shadow-[#FF9F0A]/20 font-black' : 'text-zinc-400 hover:text-white'}`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Calendario</span>
             </button>
           </div>
 
@@ -2234,6 +2577,27 @@ export default function App() {
               <kbd className="text-[9px] px-1.5 py-0.5 rounded bg-[#1e1507] border border-[#FF9F0A]/30 text-[#FF9F0A] font-mono font-bold">⇧V</kbd>
             </button>
             
+            <button 
+              onClick={handleExportBackup}
+              className="p-2 rounded-xl bg-[#151619] border border-[#26282e] text-zinc-400 hover:text-white transition-all cursor-pointer flex items-center justify-center"
+              title="Exportar copia de seguridad (JSON)"
+            >
+              <Download className="w-4.5 h-4.5 text-zinc-450 hover:text-[#FF9F0A]" />
+            </button>
+
+            <label 
+              className="p-2 rounded-xl bg-[#151619] border border-[#26282e] text-zinc-400 hover:text-white transition-all cursor-pointer flex items-center justify-center"
+              title="Importar copia de seguridad (JSON)"
+            >
+              <Upload className="w-4.5 h-4.5 text-zinc-450 hover:text-[#FF9F0A]" />
+              <input 
+                type="file" 
+                accept=".json" 
+                onChange={handleImportBackup} 
+                className="hidden" 
+              />
+            </label>
+
             <button 
               onClick={() => { setSoundEnabled(!soundEnabled); if (!soundEnabled) setTimeout(playPop, 50); }}
               className="p-2 rounded-xl bg-[#151619] border border-[#26282e] text-zinc-400 hover:text-white transition-all cursor-pointer"
@@ -2803,6 +3167,8 @@ export default function App() {
                                 setEditingTask(task);
                                 setEditTaskTitle(task.title);
                                 setEditTaskDesc(task.description);
+                                setEditTaskDueDate(task.dueDate || '');
+                                setEditTaskColumn(task.column || '');
                               }}
                               isFirstInCol={taskIdx === 0}
                               isLastInCol={taskIdx === colTasks.length - 1}
@@ -2878,7 +3244,7 @@ export default function App() {
 
               </div>
             </div>
-          ) : (
+          ) : activeView === 'analytics' ? (
             /* DYNAMIC "LOGROS" VIEW (Medals and achievements unencumbered view) */
             <div key={`${activeSheetId}_${slideDirection}`} className={`flex flex-col gap-6 px-4 sm:px-6 md:px-8 max-w-full mx-auto ${slideDirection === 'right' ? 'animate-slide-right' : 'animate-slide-left'}`}>
               
@@ -3027,6 +3393,112 @@ export default function App() {
                   </div>
                 );
               })()}
+
+            </div>
+          ) : (
+            /* GOOGLE CALENDAR SYNC VIEW */
+            <div key={`${activeSheetId}_${slideDirection}`} className={`flex flex-col gap-6 px-4 sm:px-6 md:px-8 max-w-4xl mx-auto w-full ${slideDirection === 'right' ? 'animate-slide-right' : 'animate-slide-left'}`}>
+              
+              {/* Header Title */}
+              <div className="flex flex-col gap-1 text-center sm:text-left">
+                <h2 className="text-base sm:text-xl font-display font-extrabold text-white tracking-wider uppercase flex items-center gap-2 justify-center sm:justify-start">
+                  <Radio className="w-5 h-5 text-[#FF9F0A] animate-pulse" />
+                  <span>Sincronización con Google Calendar</span>
+                </h2>
+                <p className="text-xs text-zinc-400 font-sans">
+                  Conecta y sincroniza los pendientes de tu tablero directamente con tu agenda de Google.
+                </p>
+              </div>
+
+              {/* Sync Panel & Google OAuth Connection */}
+              <div className="bg-[#121315]/95 border border-[#26282e] p-6 rounded-3xl relative overflow-hidden shadow-2xl flex flex-col gap-6">
+                <div className="absolute inset-0 bg-radial-gradient from-amber-500/5 to-transparent opacity-30 pointer-events-none" />
+                
+                {googleUser ? (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    {/* User profile details */}
+                    <div className="flex items-center gap-3.5 text-center sm:text-left">
+                      {googleUser.photoURL ? (
+                        <img src={googleUser.photoURL} alt="Avatar" className="w-12 h-12 rounded-full border-2 border-[#FF9F0A] shadow-md shadow-[#FF9F0A]/20" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-[#FF9F0A]/25 border border-[#FF9F0A]/40 text-[#FF9F0A] flex items-center justify-center font-bold text-lg">
+                          {googleUser.displayName?.charAt(0) || 'G'}
+                        </div>
+                      )}
+                      <div className="text-left">
+                        <h4 className="text-sm font-extrabold text-white">{googleUser.displayName || 'Usuario de Google'}</h4>
+                        <p className="text-[10px] font-mono text-zinc-450">{googleUser.email}</p>
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-3 w-full sm:w-auto shrink-0 justify-end">
+                      <button
+                        onClick={handleGoogleCalendarSync}
+                        disabled={isSyncing}
+                        className="px-5 py-2.5 bg-gradient-to-r from-[#FF9F0A] to-amber-500 hover:from-amber-500 hover:to-[#FFB340] text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-amber-500/20 cursor-pointer active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {isSyncing ? (
+                          <>
+                            <div className="w-3.5 h-3.5 rounded-full border-2 border-black/20 border-t-black animate-spin" />
+                            <span>Sincronizando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="w-3.5 h-3.5 fill-black" />
+                            <span>Sincronizar {tasks.length} Tareas</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={handleGoogleLogout}
+                        className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded-xl text-xs font-bold transition-all border border-zinc-700 cursor-pointer"
+                      >
+                        Cerrar Sesión
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center py-6 text-center gap-4">
+                    <div className="p-3 bg-[#FF9F0A]/10 border border-[#FF9F0A]/20 rounded-2xl text-[#FF9F0A]">
+                      <Radio className="w-6 h-6 animate-pulse" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white">Inicia sesión con tu cuenta de Google</h4>
+                      <p className="text-xs text-zinc-400 mt-1 max-w-sm leading-normal">
+                        Para poder insertar tus pendientes como eventos en tu calendario, necesitas vincular tu cuenta con un toque seguro.
+                      </p>
+                    </div>
+
+                    {/* Standard Sign in with Google button */}
+                    <button 
+                      onClick={handleGoogleLogin}
+                      className="gsi-material-button bg-white hover:bg-zinc-100 text-black px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer shadow-md transition-all active:scale-[0.98]"
+                    >
+                      <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" style={{ display: 'block' }} className="w-4 h-4">
+                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                      </svg>
+                      <span>Vincular Google Calendar</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Responsive Embedded Calendar Iframe (OLED Dark Mode Themed) */}
+              <div className="w-full bg-zinc-950 border border-zinc-800 rounded-3xl p-2.5 overflow-hidden shadow-2xl relative">
+                <div className="absolute inset-0 border border-zinc-800 pointer-events-none rounded-3xl" />
+                <iframe 
+                  src="https://calendar.google.com/calendar/embed?src=proyecto2021dejota%40gmail.com&ctz=America%2FBogota" 
+                  style={{ border: 0 }} 
+                  className="w-full h-[580px] rounded-2xl filter invert hue-rotate-180 brightness-95 saturate-100 block" 
+                  frameBorder="0" 
+                  scrolling="no"
+                />
+              </div>
 
             </div>
           )
@@ -3408,6 +3880,35 @@ export default function App() {
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 resize-none placeholder:text-zinc-650"
                 />
               </div>
+
+              <div>
+                <label className="block text-zinc-400 text-[10px] font-bold uppercase tracking-wider mb-1">
+                  Mover de Columna / Estado
+                </label>
+                <select
+                  value={editTaskColumn}
+                  onChange={(e) => setEditTaskColumn(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 [color-scheme:dark]"
+                >
+                  {activeColumns.map((col) => (
+                    <option key={col.id} value={col.id} className="bg-zinc-900 text-white">
+                      {col.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 text-[10px] font-bold uppercase tracking-wider mb-1">
+                  Programar Fecha (Sincroniza con Google Calendar)
+                </label>
+                <input 
+                  type="date"
+                  value={editTaskDueDate}
+                  onChange={(e) => setEditTaskDueDate(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 [color-scheme:dark]"
+                />
+              </div>
             </div>
 
             <div className="pt-4 flex gap-2">
@@ -3511,6 +4012,18 @@ export default function App() {
                   rows={3}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 placeholder:text-zinc-650 resize-none"
                   placeholder="Detalles sobre la tarea..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 text-[10px] font-bold uppercase tracking-wider mb-1">
+                  Programar Fecha (Opcional - Sincroniza con Google Calendar)
+                </label>
+                <input 
+                  type="date"
+                  value={taskDueDate}
+                  onChange={(e) => setTaskDueDate(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 [color-scheme:dark]"
                 />
               </div>
             </div>
@@ -3645,6 +4158,8 @@ export default function App() {
                             setEditingTask(item.task);
                             setEditTaskTitle(item.task.title);
                             setEditTaskDesc(item.task.description || '');
+                            setEditTaskDueDate(item.task.dueDate || '');
+                            setEditTaskColumn(item.task.column || '');
                             setIsSearchPaletteOpen(false);
                             setSearchQuery('');
                           }}
@@ -3807,10 +4322,17 @@ function TaskCard({ task, activeColumns, onMove, onDelete, onEdit, isFirstInCol 
         )}
       </div>
 
-      {task.description && (
+       {task.description && (
         <p className="text-[10px] sm:text-[11px] text-zinc-300/80 leading-relaxed mt-0.5 tracking-wide break-words whitespace-normal max-w-full text-left">
           {task.description}
         </p>
+      )}
+
+      {task.dueDate && (
+        <div className="flex items-center gap-1.5 text-[10px] font-mono text-amber-400 mt-1 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-lg w-fit select-none">
+          <Clock className="w-3 h-3 text-[#FF9F0A]" />
+          <span>📅 {task.dueDate}</span>
+        </div>
       )}
 
       {task.column === lastColId && (

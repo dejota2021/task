@@ -1,10 +1,11 @@
 {
-  "projectId": "organizador-6c240",
-  "appId": "1:799030597959:web:cb38d0e677ff3ac4231462",
-  "apiKey": "AIzaSyAGn5sqgoVXviJaojYEKQnlXczurnM4XDI",
-  "authDomain": "organizador-6c240.firebaseapp.com",
-  "databaseURL": "https://organizador-6c240-default-rtdb.firebaseio.com",
-  "storageBucket": "organizador-6c240.firebasestorage.app",
-  "messagingSenderId": "799030597959",
-  "measurementId": ""
+  "projectId": "oval-woods-qlcf1",
+  "appId": "1:114817546403:web:dfa09056333dca56f52716",
+  "apiKey": "AIzaSyDR_wlnbaRrHcAIJ05V542KrNOOrntx1vE",
+  "authDomain": "oval-woods-qlcf1.firebaseapp.com",
+  "storageBucket": "oval-woods-qlcf1.firebasestorage.app",
+  "messagingSenderId": "114817546403",
+  "measurementId": "",
+  "oAuthClientId": "114817546403-l741b23fkj6fur6acqn6go5a2nplphp9.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }
